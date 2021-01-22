@@ -1,6 +1,10 @@
-![image-20210120213108246](../picture/Java%E9%9B%86%E5%90%88%E7%B1%BB/image-20210120213108246.png)
+![img](../picture/Java%E9%9B%86%E5%90%88%E7%B1%BB/1010726-20170621004756882-1379253225.gif)
 
 
+
+
+
+![image-20210121220435122](../picture/Java%E9%9B%86%E5%90%88%E7%B1%BB/image-20210121220435122.png)
 
 
 
@@ -66,9 +70,9 @@ public static <T> List<T> synchronizedList(List<T> list) {
 
 ArrayList继承AbstractList抽象父类，实现了List接口（规定了List的操作规范）、**RandomAccess（可随机访问）**、Cloneable（可拷贝）、Serializable（可序列化）。
 
-![image-20210120215802748](../picture/Java%E9%9B%86%E5%90%88%E7%B1%BB/image-20210120215802748.png)
 
 
+![img](../picture/Java%E9%9B%86%E5%90%88%E7%B1%BB/1010726-20170621004756882-1379253225.gif)
 
 
 
@@ -423,65 +427,348 @@ final void checkForComodification() {
 
 
 
+`java.util.Collections.SynchronizedList`
+
+用Collections.synchronizedList方法把你的ArrayList变成一个线程安全的List，比如：
+
+```java
+List<String> synchronizedList = Collections.synchronizedList(list);
+synchronizedList.add("aaa");
+synchronizedList.add("bbb");
+for (int i = 0; i < synchronizedList.size(); i++)
+{
+    System.out.println(synchronizedList.get(i));
+}
+```
+
+
+
+另一个方法就是使用Vector，它是ArrayList的线程安全版本。
+
+## 优缺点
+
+
+
+ArrayList的优点如下：
+
+> 1、ArrayList底层以**数组实现**，是一种**随机访问**模式，再加上它实现了**RandomAccess**接口，因此查找也就是**get**的时候非常快
+>
+> 2、ArrayList在**顺序添加**一个元素的时候非常方便，只是往数组里面添加了一个元素而已
+
+不过ArrayList的缺点也十分明显：
+
+> 1、删除元素的时候，涉及到一次元素**复制**，如果要复制的元素很多，那么就会比较耗费性能
+>
+> ```java
+> private void fastRemove(Object[] es, int i) {
+>     modCount++;
+>     final int newSize;
+>     if ((newSize = size - 1) > i)
+>         System.arraycopy(es, i + 1, es, i, newSize - i);//只删除一个元素却需要整个拷贝数组
+>     es[size = newSize] = null;
+> }
+> ```
+>
+> 2、插入元素的时候，（如果需要扩容）涉及到一次元素复制，如果要复制的元素很多，那么就会比较耗费性能
+>
+> 因此，ArrayList比较适合顺序添加、随机访问的场景。
+
 
 
 # Vector
 
 
 
+***Vector是ArrayList的线程安全版本***
+
+
+
+```
+int newCapacity = oldCapacity + ((capacityIncrement > 0) ?
+                                 capacityIncrement : oldCapacity);
+```
+
+```java
+public class Vector<E>
+    extends AbstractList<E>
+    implements List<E>, RandomAccess, Cloneable, java.io.Serializable
+```
 
 
 
 
 
+Vector可以实现**可增长的对象数组**。与数组一样，它包含可以使用**整数索引进行访问**的组件。不过，Vector的**大小是可以增加或者减小**的，以便适应创建Vector后进行添加或者删除操作。
+
+**Vector实现List接口，继承AbstractList类**，所以我们可以将其看做队列，**支持相关的添加、删除、修改、遍历等功能**。
+
+Vector实现RandmoAccess接口，即提供了**随机访问**功能，提供提供快速访问功能。在Vector我们可以直接访问元素。
+
+Vector 实现了Cloneable接口，支持clone()方法，可以被克隆。
+
+vector底层数组不加transient，**序列化时会全部复制**
+
+
+
+```java
+protected Object[] elementData;
+
+//这个函数没有使用
+private void writeObject(java.io.ObjectOutputStream s)
+            throws java.io.IOException {
+    final java.io.ObjectOutputStream.PutField fields = s.putFields();
+    final Object[] data;
+    synchronized (this) {
+        fields.put("capacityIncrement", capacityIncrement);
+        fields.put("elementCount", elementCount);
+        data = elementData.clone();
+    }
+    fields.put("elementData", data);
+    s.writeFields();
+}
+```
+
+
+
+## 增删改查
+
+
+
+既提供了自己的实现，也继承了abstractList抽象类的部分方法。
+
+这些都是Element自己实现的
+
+```java
+    public synchronized E elementAt(int index) {
+        if (index >= elementCount) {
+            throw new ArrayIndexOutOfBoundsException(index + " >= " + elementCount);
+        }
+
+        return elementData(index);
+    }
+
+    public synchronized void setElementAt(E obj, int index) {
+        if (index >= elementCount) {
+            throw new ArrayIndexOutOfBoundsException(index + " >= " +
+                                                     elementCount);
+        }
+        elementData[index] = obj;
+    }
+
+    public synchronized void removeElementAt(int index) {
+        if (index >= elementCount) {
+            throw new ArrayIndexOutOfBoundsException(index + " >= " +
+                                                     elementCount);
+        }
+        else if (index < 0) {
+            throw new ArrayIndexOutOfBoundsException(index);
+        }
+        int j = elementCount - index - 1;
+        if (j > 0) {
+            System.arraycopy(elementData, index + 1, elementData, index, j);
+        }
+        modCount++;
+        elementCount--;
+        elementData[elementCount] = null; /* to let gc do its work */
+    }
+
+    public synchronized void insertElementAt(E obj, int index) {
+        if (index > elementCount) {
+            throw new ArrayIndexOutOfBoundsException(index
+                                                     + " > " + elementCount);
+        }
+        modCount++;
+        final int s = elementCount;
+        Object[] elementData = this.elementData;
+        if (s == elementData.length)
+            elementData = grow();
+        System.arraycopy(elementData, index,
+                         elementData, index + 1,
+                         s - index);
+        elementData[index] = obj;
+        elementCount = s + 1;
+    }
+
+    public synchronized void addElement(E obj) {
+        modCount++;
+        add(obj, elementData, elementCount);
+    }
+
+    public synchronized boolean add(E e) {
+        modCount++;
+        add(e, elementData, elementCount);
+        return true;
+    }
+
+```
 
 
 
 
 
+## 初始容量和扩容
+
+
+
+扩容方式和ArrayList基本一样，但是扩容时不是1.5倍扩容，而是有一个 **扩容增量**
+
+```java
+protected int elementCount;
+
+protected int capacityIncrement;
+
+public Vector() {
+    this(10);
+}
+```
+
+capacityIncrement：向量的大小大于其容量时，容量自动增加的量。
+
+如果在**创建Vector时**，**指定**了capacityIncrement的大小；则，**每次当Vector中动态数组容量增加时，增加的大小都是capacityIncrement**。
+
+如果**容量的增量小于等于零，则每次需要增大容量时，向量的容量将增大一倍**。
 
 
 
 
 
+```java
+private void add(E e, Object[] elementData, int s) {
+    if (s == elementData.length)
+        elementData = grow();
+    elementData[s] = e;
+    elementCount = s + 1;
+}
+
+private Object[] grow(int minCapacity) {
+    return elementData = Arrays.copyOf(elementData,
+                                       newCapacity(minCapacity));
+}
+
+private int newCapacity(int minCapacity) {
+    // overflow-conscious code
+    int oldCapacity = elementData.length;
+    int newCapacity = oldCapacity + ((capacityIncrement > 0) ?
+                                     capacityIncrement : oldCapacity);//增加一倍
+    if (newCapacity - minCapacity <= 0) {
+        if (minCapacity < 0) // overflow
+            throw new OutOfMemoryError();
+        return minCapacity;
+    }
+    return (newCapacity - MAX_ARRAY_SIZE <= 0)
+        ? newCapacity
+        : hugeCapacity(minCapacity);
+}
+//同ArrayList
+```
+
+
+
+## 线程安全
+
+Vector大部分方法都是用了synchronized修饰符()，所以他**是线程安全的集合类**
+
+![image-20210121213015907](../picture/Java%E9%9B%86%E5%90%88%E7%B1%BB/image-20210121213015907.png)
 
 
 
 
 
+# Stack
+
+
+
+```java
+//java.util.Stack
+class Stack<E> extends Vector<E>
+```
+
+
+
+通过**继承Vector类**，Stack类可以很容易的实现他本身的功能。因为大部分的功能**在Vector里面已经提供支持了**。 在Java中Stack类表示后进先出（LIFO）的对象堆栈。栈是一种非常常见的数据结构，它采用典型的先进后出的操作方式完成的。
 
 
 
 
 
+Stack通过五个操作对Vector进行扩展，允许将向量视为堆栈。这个五个操作如下：
+
+
+
+```java
+//查看栈顶不的对象，但不从栈中移除它
+public synchronized E peek() {
+    int     len = size();
+
+    if (len == 0)
+        throw new EmptyStackException();
+    return elementAt(len - 1);
+}
+
+//把对象压入栈顶
+public E push(E item) {
+    //添加在数组末尾
+    addElement(item);
+
+    return item;
+}
+
+//移除栈顶的对象，并返回
+public synchronized E pop() {
+    E       obj;
+    int     len = size();
+
+    obj = peek();
+    //删除vector末尾的元素，即栈顶
+    removeElementAt(len - 1);
+
+    return obj;
+}
+
+//是否为空，以后别再用isEmpty了。。。那个是继承自Vector的方法，直接empty就可以
+public boolean empty() {
+    return size() == 0;
+}
+
+//返回对象在栈中的位置
+public synchronized int search(Object o) {
+    int i = lastIndexOf(o);//↓
+
+    if (i >= 0) {
+        return size() - i;
+    }
+    return -1;
+}
+//获取元素的索引（最后一个）
+public synchronized int lastIndexOf(Object o, int index) {
+    if (index >= elementCount)
+        throw new IndexOutOfBoundsException(index + " >= "+ elementCount);
+
+    if (o == null) {
+        for (int i = index; i >= 0; i--)
+            if (elementData[i]==null)
+                return i;
+    } else {
+        for (int i = index; i >= 0; i--)
+            if (o.equals(elementData[i]))
+                return i;
+    }
+    return -1;
+}
+
+public Stack() {
+}
+```
+
+Stack继承Vector，他对Vector进行了简单的扩展：
+
+仅有一个构造方法，五个实现方法
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+**同样也是线程安全的**
 
 
 
