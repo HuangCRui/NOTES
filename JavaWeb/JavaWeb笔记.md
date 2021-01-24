@@ -434,7 +434,7 @@ public void readXML() throws DocumentException {
 
 
 
-# JavaWeb
+# Tomcat服务器
 
 
 
@@ -537,6 +537,1093 @@ work是 Tomcat 工作时的目录， 用来存放 Tomcat 运行时 jsp 翻译为
 
 
 
+---
+
+手托 html 页面到浏览器和在浏览器中输入 http://ip:端口号/工程名/访问的区别  
+
+
+
+![image-20210123161406829](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123161406829.png)
+
+![image-20210123161418025](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123161418025.png)
+
+
+
+使用的是 `file://协议`
+
+
+
+`http://192.168.0.106:8088/dt/ClassTableTry.jsp`  则使用的是http协议
+
+![image-20210123161549618](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123161549618.png)
+
+
+
+
+
+
+
+## 创建web工程
+
+
+
+![image-20210123162754345](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123162754345.png)
+
+
+
+
+
+![image-20210123162846122](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123162846122.png)
+
+
+
+![image-20210123164511246](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123164511246.png)
+
+
+
+**启动后默认访问的地址**
+
+![image-20210123164536569](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123164536569.png)
+
+
+
+启动服务器，自动打开index页面
+
+![image-20210123170039275](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123170039275.png)
+
+
+
+
+
+**有修改时热部署**    在程序发生变化时，部署在tomcat上的web项目也同时更新  刷新页面即可产生变化
+
+![image-20210123170641679](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123170641679.png)
+
+
+
+也可以修改端口号
+
+![image-20210123170535339](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123170535339.png)
+
+
+
+
+
+
+
+
+
+# Servlet
+
+1、 Servlet 是 JavaEE 规范之一。 **规范就是接口**
+2、 Servlet 就 JavaWeb **三大组件**之一。 三大组件分别是： Servlet 程序、 Filter 过滤器、 Listener 监听器。
+3、 Servlet 是运行在**服务器上的一个 java 小程序**， 它可以**接收客户端发送过来的请求， 并*响应* 数据*给客户端***  
+
+
+
+## servlet基础
+
+
+
+
+
+### 手动实现servlet程序
+
+
+
+- 编写一个类去实现这个接口
+- 实现 service 方法， 处理请求， 并响应数据  
+- 到 web.xml 中去**配置 servlet 程序的访问地址**  
+
+
+
+
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee
+http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
+version="4.0">
+    
+<!-- servlet 标签给 Tomcat 配置 Servlet 程序 -->
+<servlet>
+    <!--servlet-name 标签 Servlet 程序起一个别名（一般是类名） -->
+    <servlet-name>HelloServlet</servlet-name>
+    <!--servlet-class 是 Servlet 程序的全类名-->
+    <servlet-class>webDir1.HelloServlet</servlet-class>
+</servlet>
+    
+<!--servlet-mapping 标签给 servlet 程序配置访问地址-->
+<servlet-mapping>
+    <!--servlet-name 标签的作用是告诉服务器， 我当前配置的地址给哪个 Servlet 程序使用-->
+    <servlet-name>HelloServlet</servlet-name>
+    
+    <!--url-pattern 标签配置访问地址 <br/>
+    / 斜杠在服务器解析的时候， 表示地址为： http://ip:port/工程路径 <br/>
+    /hello 表示地址为： http://ip:port/工程路径/hello <br/>
+    -->
+    <url-pattern>/hello</url-pattern>
+</servlet-mapping>
+</web-app>
+```
+
+**斜杠在服务器解析的时候， 表示地址为： `http://ip:port/`工程路径**
+
+
+
+
+
+### 常见错误
+
+
+
+url-pattern 中配置的路径没有**以斜杠打头**。  
+
+如果不以  `/hello`   **斜杠打头**，
+
+![image-20210123184506120](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123184506120.png)
+
+
+
+---
+
+
+
+servlet-name 配置的值不存在  
+
+**servlet-mapping中的name值**要和**servlet中的name值**一样
+
+![image-20210123184524916](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123184524916.png)
+
+
+
+
+
+---
+
+
+
+servlet-class 标签的全类名配置错误
+
+
+
+ ### url地址到servlet程序的访问
+
+![image-20210123193859939](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123193859939.png)
+
+
+
+
+
+### servlet的生命周期
+
+
+
+1、 执行 Servlet 构造器方法
+2、 执行 init 初始化方法
+		第一、 二步， 是在**第一次访问**， 的时候**创建 Servlet 程序会调用**。
+3、 执行 service 方法
+		第三步， 每次访问都会调用。
+4、 执行 destroy 销毁方法
+		第四步， 在 web 工程停止的时候调用。  
+
+![image-20210123194707411](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123194707411.png)
+
+
+
+
+
+### get/post请求的分发处理
+
+**来有效区分post和get请求**
+
+
+
+
+
+![image-20210123195341370](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123195341370.png)
+
+
+
+
+
+
+
+```java
+HttpServletRequest httpServletRequest = (HttpServletRequest) servletRequest;
+//获取请求的方式
+String method = httpServletRequest.getMethod();
+System.out.println(method);
+```
+
+![image-20210123195708170](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123195708170.png)
+
+
+
+
+
+
+
+```java
+if ("GET".equals(method)) {
+	doGet();
+} else if ("POST".equals(method)) {
+	doPost();
+}
+
+/**
+* 做 get 请求的操作
+*/
+public void doGet(){
+    System.out.println("get 请求");
+    System.out.println("get 请求");
+} 
+/**
+* 做 post 请求的操作
+*/
+public void doPost(){
+    System.out.println("post 请求");
+    System.out.println("post 请求");
+}
+```
+
+
+
+
+
+### 通过继承 HttpServlet 实现 Servlet 程序  
+
+
+
+
+
+> 要实现此接口，可以编写一个扩展 `javax.servlet.GenericServlet` 的一般  servlet，或者编写一个扩展 `javax.servlet.http.HttpServlet` 的 HTTP servlet。 
+
+一般在实际项目开发中， 都是使用继承 HttpServlet 类的方式去实现 Servlet 程序。  
+
+
+
+1、 编写一个类去继承 HttpServlet 类
+2、 **根据业务**需要**重写 doGet 或 doPost 方法**
+3、 到 web.xml 中的配置 Servlet 程序的访问地址  
+
+
+
+
+
+```java
+public class HelloServlet2 extends HttpServlet {
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        System.out.println("helloservlet2  doget!!!");
+    }
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        System.out.println("helloservlet2  dopost!!!");
+    }
+}
+```
+
+
+
+
+
+
+
+### 使用idea创建servlet程序
+
+
+
+直接创建servlet程序
+
+![image-20210123214536896](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123214536896.png)
+
+
+
+
+
+直接使用注解配置name和url路径
+
+```java
+@WebServlet(name = "demo1", urlPatterns = {"/demo"})
+public class ServletDemo1 extends HttpServlet {
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        System.out.println("OHHHHHHHHHH post");
+    }
+
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        System.out.println("OHHHHHHHHHH get");
+    }
+}
+```
+
+
+
+
+
+> 如果不勾选  使用注解配置：会在web.xml中自动写入servlet标签  再添加一个serlvet-mapping就行
+
+
+
+
+
+
+
+## Servlet类的继承体系
+
+
+
+```java
+public interface Servlet 
+public interface ServletConfig 
+public abstract class GenericServlet implements Servlet, ServletConfig, Serializable
+public abstract class HttpServlet extends GenericServlet
+public class ServletDemo1 extends HttpServlet
+```
+
+
+
+![image-20210123222328437](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123222328437.png)
+
+
+
+如果不进行重写do方法，那么在接收到get/post请求时   就**会抛异常**
+
+![image-20210123223325383](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123223325383.png)
+
+
+
+
+
+## ServletConfig类
+
+
+
+servlet程序的配置信息类
+
+
+
+Servlet 程序和 ServletConfig 对象都是**由 Tomcat 负责创建**， 我们负责使用。
+Servlet 程序默认是第一次访问的时候创建， **ServletConfig 是每个 Servlet 程序创建时**， 就创建一个**对应的 ServletConfig 对象。**
+
+**每一个servletconfig对应的是自己servlet类所对应的config对象**
+
+
+
+**作用**：
+
+1、 可以获取 Servlet 程序的别名 servlet-name 的值
+2、 获取初始化参数 init-param
+3、 获取 ServletContext 对象  
+
+```java
+    @Override
+    public void init(ServletConfig servletConfig) throws ServletException {
+        System.out.println("init初始化方法");
+        System.out.println(servletConfig.getServletName());
+        System.out.println(servletConfig.getInitParameter("username"));
+        System.out.println(servletConfig.getServletContext());
+    }
+/*
+HelloSer     这个是在xml文件中配置的那个name，并非类名
+crhuang
+org.apache.catalina.core.ApplicationContextFacade@20fa3314
+*/
+
+```
+
+```xml
+<servlet>
+        <servlet-name>HelloSer</servlet-name>
+        <servlet-class>webDir1.HelloServlet</servlet-class>
+        <init-param>
+            <param-name>username</param-name>
+            <param-value>crhuang</param-value>
+        </init-param>
+        <init-param>
+            <param-name>psw</param-name>
+            <param-value>123456</param-value>
+        </init-param>
+    </servlet>
+```
+
+
+
+
+
+## ServletContext
+
+
+
+1、 ServletContext 是一个接口， 它表示 Servlet **上下文**对象
+2、 一个 web 工程， **只有一个 ServletContext 对象实例**。
+3、 ServletContext 对象是一个**域对象**。
+4、 ServletContext 是在 web 工程部署启动的时候创建。 在 web 工程停止的时候销毁。  
+
+
+
+**什么是域对象**
+
+可以像Map一样存取数据的对象。
+
+这里的域，指的是存取数据的操作范围，整个 web 工程。  
+
+- 存数据：setAttribute()
+- 取数据：getAttribute()
+- 删除数据：removeAttribute()
+
+
+
+### ServletContext作用
+
+
+
+1、 获取 web.xml 中配置的**上下文参数 context-param**
+2、 获取当前的工程路径， 格式: /工程路径
+3、 获取工程部署后在服务器硬盘上的绝对路径
+4、 像 Map一样存取数据  
+
+
+
+
+
+
+
+```java
+ServletContext context = getServletConfig().getServletContext();
+//不能得到servletconfig中配置的属性信息，二者无关
+System.out.println(context.getInitParameter("username"));//HuangCR
+
+System.out.println(context.getContextPath());// 工程路径： /webexer
+
+//获取工程部署后在服务器硬盘上的 绝对 路径
+/**
+*      / 斜杠被服务器解析地址为:http://ip:port/工程名/ 映射到 IDEA 代码的 web 目录
+*/
+
+//D:\desktop\Code\Exercise\webexer\target\webexer-1.0-SNAPSHOT\
+System.out.println(context.getRealPath("/"));
+//D:\desktop\Code\Exercise\webexer\target\webexer-1.0-SNAPSHOT\css
+System.out.println(context.getRealPath("/css"));
+```
+
+![image-20210124021621874](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124021621874.png)
+
+
+
+```xml
+<!--  context-param 是上下文参数(它属于整个 web 工程)-->
+<context-param>
+    <param-name>username</param-name>
+    <param-value>context</param-value>
+</context-param>
+
+    <context-param>
+    <param-name>password</param-name>
+    <param-value>root</param-value>
+</context-param>
+```
+
+
+
+
+
+这是一个web工程模块
+
+![image-20210124022142507](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124022142507.png)
+
+
+
+
+
+
+
+---
+
+ServletContext 像 Map 一样存取数据  
+
+
+
+一个 web 工程， **只有一个 ServletContext 对象实例**。
+
+
+
+**ServletContext对象在工程部署启动的时候创建。只要*部署后*，*往里面存放了数据*，在哪个程序中/哪个位置都可以取出来（包括刷新后，也可以）**
+
+
+
+> 这里的域，指的是存取数据的操作**范围**，**整个 web 工程。**  
+
+```java
+// 获取 ServletContext 对象
+ServletContext context = getServletContext();
+System.out.println(context);
+System.out.println("保存之前: Context1 获取 key1 的值是:"+ context.getAttribute("key1"));
+context.setAttribute("key1", "value1");
+System.out.println("Context1 中获取域数据 key1 的值是:"+ context.getAttribute("key1"));
+
+
+//在另一个servlet程序中：
+System.out.println(context);//只有一个ServletContext对象
+System.out.println("Context2 中获取域数据 key1 的值是:"+ context.getAttribute("key1"));
+```
+
+
+
+## HTTP协议
+
+
+
+客户端和服务器之间通信时，发送的数据，需要遵守的规则
+
+
+
+请求分为get  post请求
+
+
+
+
+
+### 请求的http格式
+
+
+
+#### get请求
+
+1. 请求行
+
+   请求的方式 GET
+   请求的资源路径[+?+请求参数]
+   请求的协议的版本号 HTTP/1.1  
+
+2. 请求头
+
+   key : value 组成 不同的键值对， 表示不同的含义。  
+
+![image-20210124024511473](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124024511473.png)
+
+
+
+**发送给服务器的数据是直接写在请求行中的**
+
+![image-20210124030040116](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124030040116.png)
+
+
+
+![image-20210124030119067](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124030119067.png)
+
+
+
+![image-20210124024547235](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124024547235.png)
+
+
+
+
+
+#### post请求
+
+1. 请求行
+
+   请求的方式 POST
+   请求的资源路径[+?+请求参数]
+   请求的协议的版本号 HTTP/1.1  
+
+2. 请求头
+
+   key : value 组成 不同的键值对， 表示不同的含义。 
+
+   **空行**
+
+3. 请求体  -> 就是**发送给服务器的数据**  
+
+ 
+
+![image-20210124025724440](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124025724440.png)
+
+
+
+![image-20210124025905831](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124025905831.png)
+
+
+
+
+
+### 常用请求头
+
+
+
+Accept: 表示客户端可以接收的数据类型
+Accpet-Languege: 表示客户端可以接收的语言类型
+User-Agent: 表示客户端浏览器的信息
+Host： 表示请求时的服务器 ip 和端口号  
+
+
+
+### 哪些是get/post请求
+
+
+
+GET 请求有哪些：
+1、 form 标签 method=get
+2、 a 标签
+3、 link 标签引入 css
+4、 Script 标签引入 js 文件
+5、 img 标签引入图片
+6、 iframe 引入 html 页面
+7、 **在浏览器地址栏中输入地址后敲回车**
+
+
+
+POST 请求有哪些：
+8、 form **表单**标签 **method=post**  
+
+
+
+
+
+
+
+
+
+### 响应的http格式
+
+
+
+1、 响应行
+		(1) 响应的协议和版本号
+		(2) 响应状态码
+		(3) 响应状态描述符
+2、 响应头
+
+​		key : value	   不同的响应头， 有其不同含义
+
+3、 响应体 ---->>> 就是回传给客户端的数据
+
+
+
+![image-20210124034258466](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124034258466.png)
+
+
+
+![image-20210124034949243](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124034949243.png)
+
+
+
+
+
+### 常用的响应码
+
+
+
+200 表示请求成功
+302 表示请求**重定向**（明天讲）
+404 表示请求服务器已经收到了， 但是你要的**数据不存在**（请求**地址错误**）
+500 表示服务器已经收到请求， 但是服务器**内部错误**（代码错误）  
+
+![image-20210124035150028](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124035150028.png)
+
+
+
+
+
+### MIME类型说明
+
+
+
+MIME 是 HTTP 协议中**数据类型**。
+MIME 的英文全称是"Multipurpose Internet Mail Extensions" **多功能 Internet 邮件扩充服务**。 MIME 类型的格式是“**大类型/小类型**” ， 并与某一种文件的**扩展名**相对应。  
+
+
+
+![image-20210124041705155](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124041705155.png)
+
+![image-20210124041715164](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124041715164.png)
+
+
+
+
+
+## HttpServletRequest类
+
+
+
+
+
+
+
+每次**只要有请求进入 Tomcat 服务器**， Tomcat 服务器就会把请求过来的 HTTP 协议信息**解析好封装到 Request 对象**中。
+然后**传递到 service 方法**（ doGet 和 doPost） 中给我们使用。 我们可以**通过 HttpServletRequest 对象， 获取到所有请求的信息。**  
+
+
+
+
+
+### 获取请求参数
+
+i. getRequestURI() 				获取请求的**资源路径**
+
+ii. getRequestURL() 			  获取请求的统一资源定位符（**绝对路径**）
+
+iii. getRemoteHost() 			获取客户端的 ip 地址
+
+iv. getHeader() 					获取请求头
+
+v. getParameter() 				获取请求的参数
+vi. getParameterValues() 	获取请求的参数**（多个值的时候使用）**
+vii. getMethod() 					获取请求的方式 GET 或 POST
+viii. setAttribute(key, value); 设置域数据
+ix. getAttribute(key); 			获取域数据
+x. getRequestDispatcher()   获取请求转发对象
+
+
+
+
+
+```java
+System.out.println("get");
+System.out.println(request.getHeader("Connection"));
+System.out.println(request.getRequestURI());//   /webexer/demo
+System.out.println(request.getRequestURL());//   http://localhost:8088/webexer/demo
+System.out.println(request.getRemoteHost());//   0:0:0:0:0:0:0:1  使用真实ip访问： 192.168.0.106
+//使用手机访问：192.168.0.102
+
+/*
+192.168.0.102
+神魔恋
+手机也可以连接这个服务器
+ */
+System.out.println(request.getParameter("username"));//获得表单提交的参数
+```
+
+
+
+### post请求中文乱码
+
+
+
+doGet 请求的**中文乱码**解决：  
+
+
+
+```java
+// 获取请求参数
+String username = req.getParameter("username");
+//1 先以 iso8859-1 进行编码
+//2 再以 utf-8 进行解码
+username = new String(username.getBytes("iso-8859-1"), "UTF-8");
+```
+
+----
+
+POST 请求的中文乱码解决  
+
+
+
+
+
+```java
+// 设置请求体的字符集为 UTF-8， 从而解决 post 请求的中文乱码问题   不设置会出现中文乱码
+req.setCharacterEncoding("UTF-8");
+System.out.println("-------------doPost------------");
+// 获取请求参数
+String username = req.getParameter("username");
+String password = req.getParameter("password");
+String[] hobby = req.getParameterValues("hobby");
+System.out.println("用户名： " + username);
+System.out.println("密码： " + password);
+System.out.println("兴趣爱好： " + Arrays.asList(hobby));
+```
+
+
+
+
+
+
+
+### 请求的转发
+
+
+
+请求转发是指， 服务器收到请求后， 从一个资源跳转到另一个资源的操作叫请求转发  
+
+
+
+![image-20210124194220872](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124194220872.png)
+
+
+
+**浏览器地址栏没有变化**
+
+**一次请求**
+
+ 2还要经过1，然后回到客户端
+
+**可以跳转到web-inf目录中的资源**
+
+
+
+**给的url地址是从web工程下开始寻找路径，所以不能访问工程以外的资源**
+
+
+
+```java
+protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    System.out.println("demo1  doget");
+    String username = request.getParameter("username");
+    System.out.println("username in demo1 " + username);
+
+    //给材料改一个章，并传递到servletdemo2中
+    request.setAttribute("key", "柜台1的章");
+
+    //问路？
+    RequestDispatcher requestDispatcher = request.getRequestDispatcher("/demo2");
+
+    //走向demo2
+    requestDispatcher.forward(request, response);
+}
+
+
+protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    System.out.println("demo2 doget");
+    String username = request.getParameter("username");
+    System.out.println("username in demo2 " + username);
+
+    Object key = request.getAttribute("key");
+    System.out.println("demo1的盖章??" + key);
+
+    System.out.println("demo2 do something");
+}
+```
+
+
+
+### base标签
+
+
+
+正常的跳转href：
+
+![image-20210124210952852](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124210952852.png)
+
+
+
+
+
+
+
+
+
+![image-20210124210754827](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124210754827.png)
+
+
+
+这是请求转发后进入的页面，***地址不变***
+
+![image-20210124210857184](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124210857184.png)
+
+
+
+**相对于当前浏览器地址！！**
+
+![image-20210124211022928](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124211022928.png)
+
+
+
+
+
+```html
+<base href="http://192.168.0.106:8088/webexer/css/a/b/">
+<base href="/webexer/css/a/b/">   这个也可以。需要从工程名开始
+```
+
+> 最后一个/一定要有，否则会认为b是一个资源
+
+
+
+**之所以跳不回去，是因为参照的地址没有发生变化**
+
+
+
+base标签使它参照的地址不根据浏览器地址而变化 ，**设置页面  *相对路径* 工作时参照的地址**
+
+
+
+
+
+
+
+## HttpServletResponse类
+
+
+
+HttpServletResponse 类和 HttpServletRequest 类一样。 每次请求进来， Tomcat 服务器都会创建一个 Response 对象传
+递给 Servlet 程序去使用。 HttpServletRequest 表示请求过来的信息， HttpServletResponse 表示所有响应的信息
+
+
+
+我们如果需要设置**返回给客户端的信息**， 都可以**通过 HttpServletResponse 对象来进行设置**  
+
+
+
+字节流			getOutPutStream()			常用于下载（传递二进制数据)
+
+字符流			getWriter()							常用于回传字符串（常用）
+
+
+
+两个流同时**只能使用一个**。
+使用了字节流， 就不能再使用字符流， 反之亦然， 否则就会报错。  
+
+同时使用了两个响应流
+
+![image-20210124224738805](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124224738805.png)
+
+
+
+
+
+### 往客户端回传数据
+
+
+
+```java
+PrintWriter printWriter = response.getWriter();
+printWriter.write("response content!!");//显示在浏览器页面上，返回的数据
+```
+
+
+
+
+
+### 解决响应中文乱码
+
+
+
+
+
+
+
+还要调整浏览器的字符集格式   Chrome默认GBK
+
+![image-20210124225518303](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124225518303.png)
+
+
+
+
+
+```java
+protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    System.out.println("demo1  doget");
+
+    System.out.println(response.getCharacterEncoding());//ISO-8859-1  不支持中文
+    response.setCharacterEncoding("UTF-8");//鏉庡湪骞茬榄�!!
+
+    //通过响应头，设置浏览器也使用utf-8字符集
+    response.setHeader("Content-Type", "text/html;charset=UTF-8");
+
+    PrintWriter printWriter = response.getWriter();
+    printWriter.write("李在干神魔!!");
+}
+```
+
+
+
+
+
+![image-20210124231008824](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124231008824.png)
+
+
+
+---
+
+
+
+```java
+//同时设置服务器和客户端都使用utf-8，还设置了响应头
+//此方法一定要在获取流对象之前调用  才有效
+response.setContentType("text/html;charset=UTF-8");
+
+System.out.println(response.getCharacterEncoding());//UTF-8
+PrintWriter printWriter = response.getWriter();
+printWriter.write("李在干神魔!!");
+```
+
+
+
+
+
+
+
+### 请求重定向
+
+
+
+
+
+请求重定向， 是指**客户端给服务器发请求**， 然后服务器告诉客户端说： 我给你一些地址， **你去新地址访问**。 叫请求重定向（因为**之前的地址可能已经被废弃**） 。  
+
+
+
+![image-20210124232603299](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124232603299.png)
+
+
+
+
+
+
+
+```java
+System.out.println("response demo1  here!!");
+//设置响应状态码302，表示重定向
+response.setStatus(302);
+
+//不共享request域中的数据
+request.setAttribute("key1", "v1");
+
+//设置响应头  说明新的地址
+response.setHeader("Location", "/webexer/demo2");//或者http://localhost:8088/webexer/demo2  或者  demo2  或者/webexer/demo2
+
+//这里的 /斜杠，是交给浏览器来解析：http://localhost:8080，所以需要写出工程名
+```
+
+
+
+
+
+请求demo？返回302 重定向到demo2？返回成功！200
+
+![image-20210125004941661](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210125004941661.png)
+
+![image-20210125005058797](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210125005058797.png)
+
+
+
+
+
+> 特点：
+>
+> - 浏览器地址栏会发生变化
+> - 是两次请求（请求转发是一次）
+> - 不共享request域中的数据（`requestDispatcher.forward(request, response);`，和请求转发不一样，不传request和response对象，也就不共享数据域）
+> - **不能访问WEB-INF下的资源**：浏览器得到重定向地址，归根结底，还是 **浏览器发的请求，受保护，还是无法进入web-inf目录**
+>   - **请求转发是  服务器发的请求，所以可以进入web-inf目录**
+> - **可以访问工程外的资源**（一定要加http://....）
+
+
+
+
+
+---
+
+请求重定向第二种方法
+
+
+
+```java
+response.sendRedirect("/webexer/css/a/b/a.html");
+```
 
 
 
@@ -547,3 +1634,150 @@ work是 Tomcat 工作时的目录， 用来存放 Tomcat 运行时 jsp 翻译为
 
 
 
+
+
+
+
+
+
+
+# Tips
+
+
+
+## idea-tomcat控制台中文乱码问题
+
+![image-20210123184005079](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210123184005079.png)
+
+`-Dfile.encoding=UTF-8`
+
+
+
+并要保证setting-file encoding中设置均为UTF-8编码
+
+
+
+
+
+## service和doget/post关系
+
+如果一个httpservlet的子类同时override了service和dopost/get方法，那么**只会调用service方法**
+
+
+
+> 因为在HttpServlet中 service()方法 **实现了请求的分发处理**
+>
+> ```java
+> String method = req.getMethod();
+> ```
+
+
+
+
+
+## httpservlet继承类 重写init方法
+
+
+
+```java
+//javax.servlet.GenericServlet#config
+private transient ServletConfig config;
+
+//javax.servlet.GenericServlet#init(javax.servlet.ServletConfig)
+public void init(ServletConfig config) throws ServletException {
+    this.config = config;
+    this.init();
+}
+
+@Override
+public void init(ServletConfig config) throws ServletException {
+    super.init(config);
+}
+
+//config对象是通过init进行初始化
+//javax.servlet.GenericServlet#getServletConfig
+public ServletConfig getServletConfig() {
+    return this.config;
+}
+```
+
+**需要调用super.init(config)方法**
+
+如果对init进行重写，就会导致ServletConfig**没有进行初始化**
+
+
+
+
+
+
+
+## 路径名称
+
+
+
+![image-20210124214947836](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210124214947836.png)
+
+一定要加http://才能正确定位
+
+
+
+
+
+## web中 / 斜杠的不同意义
+
+
+
+/ 斜杠           
+
+- 如果被**浏览器解析**， 得到的地址是： http://ip:port/       就只是在当前服务器port：8088下来进行跳转，所以默认就是`http://localhost:8088`
+
+  ```html
+  <base href="/webexer/css/a/b/">   <!--在html文件中，由浏览器解析-->
+  ```
+
+- 如果被**服务器解析 => 就是在java文件中（因为java文件是交给服务器来运行的，服务器知道当前的工程目录）**， 得到的地址是： http://ip:port/**工程路径**  
+
+  1、 `<url-pattern>/servlet1</url-pattern>`
+  2、 `servletContext.getRealPath(“/”)`
+  3、 `request.getRequestDispatcher(“/”)`  
+
+
+
+
+
+特殊情况： response.sendRediect(“/”); （**请求重定向**）把  **斜杠发送给浏览器解析**。 得到 http://ip:port/  
+
+
+
+
+
+---
+
+
+
+示例1:
+
+```html
+<a href="/css/a/b/a.html">进去</a>
+```
+
+因为这里的 **/斜杠**  代表的就是`http://ip:0888`
+
+去掉  /   或者使用 `<a href="./css/a/b/a.html">进去</a>`     success~ 
+
+![image-20210125004837621](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210125004837621.png)
+
+---
+
+
+
+示例2
+
+
+
+```java
+response.setHeader("Location", "www.baidu.com");//这个不行  一定要加http://
+response.setHeader("Location", "demo2");//这个可以
+
+//一旦加了“/demo2”，那么浏览器就会从localhost:8080开始进入/demo2  如果不加，就默认为在本工程下面寻找的demo2文件，就可以找到映射的servlet
+```
