@@ -621,6 +621,12 @@ work是 Tomcat 工作时的目录， 用来存放 Tomcat 运行时 jsp 翻译为
 
 
 
+
+
+![image-20210126040825219](../picture/JavaWeb%E7%AC%94%E8%AE%B0/image-20210126040825219.png)
+
+
+
 ## servlet基础
 
 
