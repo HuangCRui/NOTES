@@ -1,3 +1,7 @@
+
+
+[TOC]
+
 # Spring概述
 
 
@@ -1293,7 +1297,7 @@ public void destroy(){
 | 注解            | 说明                                                         |
 | --------------- | ------------------------------------------------------------ |
 | @Configuration  | 用于指定当前类是一个 **Spring  配置类**，当**创建容器**时会**从该类上加载注解** |
-| @ComponentScan  | 用于指定 Spring   在初始化容器时**要扫描的包**。   作用和在 Spring   的 xml 配置文件中的   <context:component-scan   base-package="com.itheima"/>一样 |
+| @ComponentScan  | 用于指定 Spring   在初始化容器时**要扫描的包**。   作用和在 Spring   的 xml 配置文件中 的   <context:component-scan   base-package="com.itheima"/>一样 |
 | @Bean           | **使用在*方法*上 **，标注将该方法的**返回值**存储到   Spring   容器中 |
 | @PropertySource | 用于加载**.properties 文件**中的配置                         |
 | @Import         | 用于导入其他配置类                                           |
@@ -1329,7 +1333,7 @@ public class SpringConfiguration {
         <property name="driverClass" value="${jdbc.driver}"/>
         <property name="jdbcUrl" value="${jdbc.url}"/>
         <property name="user" value="${jdbc.username}"/>
-        <property name="password" value="${jdbc.password}"/>
+        <property name="password" value="${jdbc.password}"/> 
     </bean>
      */
 
@@ -1477,6 +1481,695 @@ public class SpringJunitTest {
 @ContextConfiguration(classes = SpringConfiguration.class)
 public class SpringJunitTest {
 ```
+
+
+
+
+
+
+
+
+
+# Spring AOP
+
+
+
+AOP 为 Aspect Oriented Programming 的缩写，意思为**面向切面编程**，是通**过预编译方式**和**运行期动态代理（不修改源码，完成程序功能之间的松耦合）**实现程序功能的统一维护的一种技术。
+
+AOP 是 OOP 的延续，是软件开发中的一个热点，也是Spring框架中的一个重要内容，是函数式编程的一种衍生范型。利用AOP可以**对业务逻辑的各个部分进行隔离**，从而使得业务逻辑各部分之间的**耦合度降低**，提高程序的**可重用性**，同时提高了开发的效率。
+
+
+
+## AOP的作用及其优势
+
+**作用：在程序运行期间，在不修改源码的情况下对方法进行功能增强**，都配置上某一个功能
+
+​		**抽取代码**
+
+优势：减少重复代码，提高开发效率，并且便于维护
+
+
+
+> B、C、D功能都需要A功能，本来是需要引那个功能，AOP配置使得B、C、D都具备A功能
+
+![image-20210127152617133](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127152617133.png)
+
+**都需要改，维护困难**
+
+抽取出来？都需要引用日志控制方法
+
+![image-20210127152712118](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127152712118.png)
+
+**耦合死了！**，从代码角度在一起了
+
+![image-20210127152943062](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127152943062.png)
+
+这时候，这两段代码就没任何关系了
+
+
+
+**通过配置文件，告诉他们相结合**
+
+解耦---
+
+
+
+> 简要理解：切面：目标方法+功能增强
+
+
+
+**AOP的底层实现**
+
+实际上，AOP 的底层是通过 Spring 提供的的**动态代理技术**实现的。在运行期间，Spring通过动态代理技术动态地生成代理对象，代理对象方法执行时进行增强功能的介入，在去调用目标对象的方法，从而完成功能的增强。
+
+
+
+
+
+
+
+## AOP的动态代理技术
+
+常用的动态代理技术
+
+JDK 代理 : 基于**接口**的动态代理技术，**基于接口**动态生成代理对象，保证代理对象和目标对象有相同的方法
+
+cglib 代理：基于**父类**的动态代理技术，没有接口，cglib为目标对象 **动态生成子对象，子对象功能进行增强**，*不是继承*
+
+![image-20210127151855139](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127151855139.png)
+
+
+
+### JDK的动态代理
+
+
+
+**底层实现**：
+
+```java
+public static void main(String[] args) {
+
+    //创建目标对象
+    Target target = new Target();
+    //获得增强对象
+    Advice advice = new Advice();
+
+    //返回值  就是动态生成的代理对象
+    //代理对象和目标对象是兄弟关系，用接口来接受
+    TargetInterface proxy = (TargetInterface) Proxy.newProxyInstance(
+            target.getClass().getClassLoader(),//目标对象类加载器
+            target.getClass().getInterfaces(),//目标对象相同的接口字节码对象数组
+            new InvocationHandler() {
+                @Override
+                public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                    advice.before();//前置增强
+                    Object invoke = method.invoke(target, args);//执行目标方法
+                    advice.after();//后置增强
+                    return invoke;
+                }
+                //调用代理对象的任何方法，实质执行的都是invoke方法
+            }
+    );
+
+    //调用代理对象的方法
+    proxy.save();//save running
+}
+```
+
+
+
+
+
+### cglib的动态代理
+
+
+
+spring将cglib集成到spring-core里了
+
+![image-20210127164451110](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127164451110.png)
+
+
+
+
+
+```java
+public static void main(String[] args) {
+
+    //创建目标对象
+    Target target = new Target();
+    //获得增强对象
+    Advice advice = new Advice();
+
+    //返回值  就是动态生成的代理对象  基于cglib
+    //1.创建增强器
+    Enhancer enhancer = new Enhancer();
+    //2.设置父类（目标）
+    enhancer.setSuperclass(Target.class);
+    //3.设置回调
+    enhancer.setCallback(new MethodInterceptor() {
+        @Override
+        public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) throws Throwable {
+            advice.before();//执行前置
+            method.invoke(target, objects);//执行目标
+            advice.after(); //执行后置
+            return null;
+        }
+    });
+    //3.创建代理对象  可以使用Target接，生成的是子类
+    Target proxy = (Target) enhancer.create();
+
+    //调用代理对象的方法
+    proxy.save();//save running
+}
+```
+
+
+
+
+
+## AOP相关概念
+
+
+
+Spring 的 AOP 实现底层就是对上面的动态代理的代码进行了**封装**，封装后我们只需要对需要关注的部分进行代码编写，并通过配置的方式完成指定目标的方法增强。
+
+在正式讲解 AOP 的操作之前，我们必须理解 AOP 的相关术语，常用的术语如下：
+
+- Target（目标对象）：代理的目标对象（**要被增强的对象**）
+
+- Proxy （代理）：一个类被 AOP 织入增强后，就产生一个**结果代理类**
+
+- Joinpoint（连接点）：所谓连接点是指那些被**拦截到的点**。在spring中,这些点指的是**方法**，因为spring只支持**方法类型**的连接点（拦截到，才能呢进行增强）----***可以*  被增强的方法**
+
+- Pointcut（切入点）：所谓切入点是指我们要对哪些 Joinpoint 进行拦截的定义（**要对哪些连接点进行配置，真正被增强的**）
+
+- Advice（通知/ 增强）：所谓通知是指拦截到 Joinpoint 之后所要做的事情就是通知
+
+- Aspect（切面）：是**切入点和通知（引介）的结合**
+
+  Spring AOP就是负责实施切面的框架, ***它将切面所定义的横切逻辑织入到切面所指定的连接点中***. AOP的工作重心在于如何***将增强织入目标对象的连接点上***, 这里包含两个工作:
+
+  1. 如何通过 pointcut 和 advice 定位到特定的 joinpoint 上
+  2. 如何在 advice 中编写切面代码.
+
+  **可以简单地认为, 使用 @Aspect 注解的类就是切面.**
+
+- Weaving（织入）**动词**：是指**把增强应用到目标对象**来**创建新的代理对象**的过程。spring采用动态代理织入，而AspectJ采用编译期织入和类装载期织入
+
+
+
+
+
+
+
+## AOP开发明确的事项
+
+
+
+1. 需要编写的内容
+
+   - 编写核心业务代码（**目标类的目标方法**）
+   - 编写**切面类**，切面类中有**通知(增强功能方法)**
+   - 在配置文件中，**配置织入关系**，即将哪些通知与哪些连接点进行**结合**
+
+2. AOP技术实现的内容
+
+   Spring 框架**监控切入点方法的执行**。一旦监控到切入点方法被运行，**使用代理机制**，**动态创建切点所在目标对象的  *代理对象***，根据通知**类别（前置/后置）**，在代理对象的**对应位置**，将通知对应的功能**织入**，完成完整的代码逻辑运行。
+
+3. AOP 底层使用哪种代理方式
+
+   在 spring 中，框架会**根据目标类是否实现了接口**来决定采用哪种动态代理的方式。
+
+
+
+## 知识要点
+
+
+
+- aop：面向切面编程
+
+- aop底层实现：基于JDK的动态代理 和 基于Cglib的动态代理
+
+- aop的重点概念：
+
+  > Pointcut（切入点）：被增强的方法
+  >
+  > Advice（通知/ 增强）：封装增强业务逻辑的方法
+  >
+  > Aspect（切面）：切点+通知
+  >
+  > Weaving（织入）：将切点与通知结合的过程
+
+- 开发明确事项：
+
+  > 谁是**切点**（切点表达式配置）
+  >
+  > 谁是**通知**（切面类中的增强方法）
+  >
+  > 将切点和通知进行**织入配置**
+
+
+
+
+
+
+
+## 基于XML的AOP开发
+
+
+
+
+
+①导入 AOP 相关坐标
+
+![image-20210127174518028](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127174518028.png)
+
+```xml
+<dependency>
+    <groupId>org.aspectj</groupId>
+    <artifactId>aspectjweaver</artifactId>
+    <version>1.9.2</version>
+</dependency>
+```
+
+
+
+
+
+②创建目标接口和目标类（内部有切点）
+
+```java
+public class Target  implements TargetInterface {
+    @Override
+    public void save() {
+        System.out.println("save running");
+    }
+}
+```
+
+
+
+③创建切面类（内部有增强方法）
+
+```java
+public class MyAspect {
+
+    public void before(){
+        System.out.println("前置增强");
+    }
+}
+```
+
+
+
+④将目标类和切面类的对象创建权交给 spring  **bean标签**
+
+⑤在 applicationContext.xml 中配置织入关系
+
+
+
+导入aop命名空间
+
+```xml
+xmlns:aop="http://www.springframework.org/schema/aop"
+
+http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
+```
+
+
+
+
+
+```xml
+<!--    配置目标对象-->
+    <bean id="target" class="com.crhuang.aop.Target"/>
+
+<!--    切面对象-->
+    <bean id="myAspect" class="com.crhuang.aop.MyAspect"/>
+
+<!--    告诉spring框架  哪些方法(切点)需要被进行哪些增强？-->
+<!--    配置织入-->
+    <aop:config >
+<!--        告诉spring 这是个切面类-->
+        <aop:aspect ref="myAspect">
+<!--            切面：切点+通知-->
+<!--            哪些方法是前置增强   切点表达式  方法全限定名-->
+            <aop:before method="before" pointcut="execution(public void com.crhuang.aop.Target.save())"/>
+        </aop:aspect>
+    </aop:config>
+```
+
+- `<aop:aspect ref="myAspect">` 指定切面的**引用**：ref   才代表MyAspect是一个切面类
+
+- `before` 增强类型
+
+- `method="before"` 切面对象内的before()方法  **只是个方法名**
+
+- `pointcut="execution(public void com.crhuang.aop.Target.save())"` 切点表达式
+
+
+
+
+
+
+
+
+
+⑥测试代码
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration("classpath:applicationContext.xml")
+public class AopTest {
+
+    @Autowired
+    //注意：这里要  使用接口来接，代理对象并不是Target类的子类或实现类
+    private TargetInterface target;
+
+    @Test
+    //另外：Test要使用junit里的，别选成junit.jupiter了
+    public void test1(){
+        target.save();
+    }
+}
+```
+
+
+
+**BeanNotOfRequiredTypeException 说明使用的类型不对，不能使用Target类接这个代理对象**
+
+![image-20210127182322464](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127182322464.png)
+
+
+
+![image-20210127182242259](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127182242259.png)
+
+
+
+
+
+
+
+### xml配置AOP详解
+
+
+
+### 切点表达式的写法
+
+
+
+表达式语法：
+
+`execution([修饰符] 返回值类型 包名.类名.方法名(参数))`
+
+
+
+- 访问修饰符可以省略
+
+- 返回值类型、包名、类名、方法名可以使用星号*  代表任意
+
+- 包名与类名之间一个点 . 代表当前包下的类，**两个点 .. 表示当前包及其子包下的类**
+
+- 参数列表可以使用两个点 **.. 表示任意个数，任意类型的参数列表**
+
+
+
+> method方法，并且没有返回值，没有参数
+> `execution(public void com.itheima.aop.Target.method())`	
+>
+> **Target类的所有方法任意参数，就是所有的方法都会被增强，但要求是void**
+>
+> `execution(void com.itheima.aop.Target.*(..))`
+>
+> **返回值任意，包下的任意类的任意方法**
+>
+> `execution(* com.itheima.aop.*.*(..))`
+>
+> **aop包及子包下(如：aop.aop1.Target)的任意类的任意方法**
+>
+> `execution(* com.itheima.aop..*.*(..))`
+>
+> 无意义。。。
+>
+> `execution(* *..*.*(..))`
+
+
+
+### 通知的类型
+
+
+
+```xml
+<aop:通知类型 method=“切面类中方法名” pointcut=“切点表达式"></aop:通知类型>
+```
+
+![image-20210127190033064](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127190033064.png)
+
+
+
+```xml
+<!--    告诉spring框架  哪些方法(切点)需要被进行哪些增强？-->
+<!--    配置织入-->
+    <aop:config >
+<!--        告诉spring 这是个切面类-->
+        <aop:aspect ref="myAspect">
+<!--            切面：切点+通知-->
+<!--            哪些方法是前置增强   切点表达式  方法全限定名-->
+<!--            <aop:before method="before" pointcut="execution(* com.crhuang.aop.*.*(..))"/>-->
+<!--            <aop:after-returning method="afterReturning" pointcut="execution(* com.crhuang.aop.*.*(..))"/>-->
+            <aop:around method="around" pointcut="execution(* com.crhuang.aop.*.*(..))"/>
+            <aop:after-throwing method="afterThrowing" pointcut="execution(* com.crhuang.aop.*.*(..))"/>
+            <aop:after method="after" pointcut="execution(* com.crhuang.aop.*.*(..))"/>
+        </aop:aspect>
+    </aop:config>
+```
+
+
+
+```java
+//正在执行的 连接点   ---  就是切点
+public Object around(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+    System.out.println("环绕前");
+    //切点方法
+    Object proceed = proceedingJoinPoint.proceed();
+    System.out.println("环绕后");
+    return proceed;
+}
+
+public void afterThrowing(){
+    System.out.println("异常抛出增强");
+}
+
+public void after(){
+    System.out.println("最终增强.......");
+}
+```
+
+
+
+
+
+### 切点表达式的抽取
+
+
+
+抽取完好维护
+
+
+
+当多个增强的切点表达式相同时，可以将切点表达式进行抽取，在增强中使用 pointcut-ref 属性代替 pointcut 属性来引用抽取后的切点表达式。
+
+
+
+```xml
+<aop:pointcut id="myPointcut" expression="execution(* com.crhuang.aop.*.*(..))"/>
+
+<aop:around method="around" pointcut-ref="myPointcut"/>
+```
+
+
+
+## 基于注解的AOP开发
+
+
+
+开发步骤：
+
+①创建目标接口和目标类（内部有切点）
+
+```java
+@Component("target")
+public class Target  implements TargetInterface {
+    @Override
+    public void save() {
+        System.out.println("save running");
+    }
+
+    @Override
+    public void save2() {
+        System.out.println("save2 running");
+    }
+}
+```
+
+
+
+
+
+②创建切面类（内部有增强方法）
+
+③将目标类和切面类的对象创建权交给 spring
+
+④在切面类中使用注解配置织入关系
+
+```java
+@Component("myAspect")
+@Aspect//标注当前这个MyAspect是一个切面类
+public class MyAspect {
+
+    //不用告诉是前置了，直接在这配置  需要指定切点表达式
+    @Before(value = "execution(* com.crhuang.anno.*.*(..))")
+    public void before(){
+        System.out.println("前置增强");
+    }
+```
+
+
+
+
+
+⑤在配置文件中开启组件扫描和 AOP 的自动代理
+
+
+
+```xml
+    <context:component-scan base-package="com.crhuang.anno"/>
+
+<!--    aop自动代理-->
+    <aop:aspectj-autoproxy/>
+```
+
+⑥测试
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration("classpath:applicationContext.xml")
+public class AnnoTest {
+
+    @Autowired
+    //别忘了开启组件扫描
+    private TargetInterface target;
+
+    @Test
+    public void test1(){
+        target.save();
+    }
+}
+```
+
+
+
+### 注解配置aop详解
+
+
+
+通知的配置语法：@通知注解(“切点表达式")
+
+
+
+![image-20210127214004770](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210127214004770.png)
+
+
+
+
+
+```java
+@Around(value = "execution(* com.crhuang.anno.*.*(..))")
+//正在执行的 连接点   ---  就是切点
+public Object around(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+    System.out.println("环绕前");
+    //切点方法
+    Object proceed = proceedingJoinPoint.proceed();
+    System.out.println("环绕后");
+    return proceed;
+}
+```
+
+
+
+切点表达式的抽取：
+
+
+
+```java
+@Around("MyAspect.pointCut()")
+//正在执行的 连接点   ---  就是切点
+public Object around(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+    System.out.println("环绕前");
+    //切点方法
+    Object proceed = proceedingJoinPoint.proceed();
+    System.out.println("环绕后");
+    return proceed;
+}
+
+//定义一个切点表达式  注解需要一个宿主
+@Pointcut("execution(* com.crhuang.anno.*.*(..))")
+public void pointCut(){}
+```
+
+
+
+---
+
+
+
+注解aop开发步骤:
+
+
+
+①使用@Aspect**标注切面类**
+
+②使用@通知注解**标注通知方法**
+
+③在配置文件中配置aop自动代理`<aop:aspectj-autoproxy/>`
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

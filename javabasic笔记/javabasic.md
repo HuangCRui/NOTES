@@ -1734,7 +1734,7 @@ public class MyException extends RuntimeException {
 包含一个或多个==抽象方法==的类也必须被声明为==抽象类==
 使用abstract修饰符来表示抽象方法以及抽象类。
 
-``` 
+``` java
 //有抽象方法的类也必须被声明为abstract
 public abstract class Test1 {
 	//抽象方法，不能有“{}”
@@ -1747,14 +1747,14 @@ public abstract class Test1 {
 
 抽象类不能直接使用，需要子类去**实现**抽象类，然后使用其子类的实例。然而==可以创建一个变量，其类型也是一个抽象类==，并让他==指向具体子类的一个实例==，也就是可以**使用抽象类来充当形参**，==实际实现类为实参==，也就是==多态==的应用。
 
-``` 
+``` java
 People people = new teacher("教师");
 prople.work();
 ```
 ==不能有抽象构造方法  或  抽象静态方法==
 非要使用new来创建一个==抽象类的实例==？？？憨批行为~
 
-``` 
+``` java
 People people=new People() {
 	@Override
 	public void work() {
