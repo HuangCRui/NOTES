@@ -2139,10 +2139,571 @@ public void pointCut(){}
 
 
 
+ # JdbcTemplate基本使用
+
+
+
+JdbcTemplate是spring框架中提供的一个对象，是对原始繁琐的**Jdbc API对象的简单封装**。spring框架为我们提供了很多的**操作模板类**。例如：操作关系型数据的JdbcTemplate和HibernateTemplate，操作nosql数据库的RedisTemplate，操作消息队列的JmsTemplate等等。
+
+
+
+
+
+
+
+## JdbcTemplate基本使用
+
+
+
+
+
+
+
+
+
+①导入**spring-jdbc和spring-tx**坐标
+
+![image-20210128152441745](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210128152441745.png)
+
+
+
+**别忘了mysql和c3p0依赖**
+
+```xml
+<dependency>
+    <groupId>c3p0</groupId>
+    <artifactId>c3p0</artifactId>
+    <version>RELEASE</version>
+</dependency>
+<dependency>
+    <groupId>com.mchange</groupId>
+    <artifactId>c3p0</artifactId>
+    <version>RELEASE</version>
+</dependency>
+
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>8.0.13</version>
+</dependency>
+```
+
+
+
+②创建数据库表和实体
+
+③创建JdbcTemplate对象
+
+④执行数据库操作
+
+
+
+```java
+@Test
+//测试jdbctemplate开发步骤
+public void test1() throws PropertyVetoException, SQLException {
+    //创建数据源对象
+    ComboPooledDataSource dataSource = new ComboPooledDataSource();
+    dataSource.setDriverClass("com.mysql.cj.jdbc.Driver");
+    dataSource.setJdbcUrl("jdbc:mysql://localhost:3306/demo?useSSL=false&serverTimezone=GMT%2B8");
+    dataSource.setUser("root");
+    dataSource.setPassword("huangchenrui20");
+
+
+    JdbcTemplate jdbcTemplate = new JdbcTemplate();
+    //设置数据源对象，知道数据库在哪，需要有Connection对象
+    jdbcTemplate.setDataSource(dataSource);
+    //执行操作
+    int row = jdbcTemplate.update("insert into account values(?,?)", "dasima", 5000);
+    System.out.println(row);
+}
+```
+
+
+
+
+
+## Spring产生模板对象
+
+
+
+
+
+我们可以将JdbcTemplate的创建权交给Spring，将数据源DataSource的创建权也交给Spring，在Spring容器内部将数据源DataSource注入到JdbcTemplate模版对象中,然后通过Spring容器获得JdbcTemplate对象来执行操作。
+
+
+
+
+
+`JdbcTemplate jdbcTemplate = new JdbcTemplate();`----> **无参构造 ----  bean**
+
+
+
+`jdbcTemplate.setDataSource(dataSource);`  **依赖注入**
+
+
+
+`dataSource` **bean**
+
+
+
+
+
+```xml
+xmlns:context="http://www.springframework.org/schema/context"
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+
+<context:property-placeholder location="jdbc.properties"/>
+
+<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+    <property name="driverClass" value="${jdbc.Driver}"/>
+    <property name="jdbcUrl" value="${jdbc.url}"/>
+    <property name="user" value="${jdbc.username}"/>
+    <property name="password" value="${jdbc.password}"/>
+</bean>
+
+<bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+    <property name="dataSource" ref="dataSource"/>
+</bean>
+```
+
+
+
+```java
+@Test
+public void test2(){
+    ClassPathXmlApplicationContext classPathXmlApplicationContext = new ClassPathXmlApplicationContext("applicationContext.xml");
+    JdbcTemplate jdbcTemplate = classPathXmlApplicationContext.getBean(JdbcTemplate.class);
+    int row = jdbcTemplate.update("insert into account values(?,?)", "dasima", 5000);
+    System.out.println(row);
+}
+```
+
+
+
+## 常用操作-更新/查询
+
+
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration("classpath:applicationContext.xml")
+public class JdbcTemplateCRUDTest {
+    @Autowired
+    private JdbcTemplate template;
+
+    @Test
+    public void testUpdate(){
+        template.update("update account set money=? where name=?", 10000, "dasima");
+    }
+    @Test
+    public void testDelete(){
+        template.update("delete from account where name=?","dasima");
+    }
+}
+```
+
+```
+BeanPropertyRowMapper
+```
+
+
+
+
+
+
+
+![image-20210128165415298](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210128165415298.png)
+
+
+
+```java
+@Test
+public void queryAll(){
+    //rowmapper数据实体封装  用房的多的：实体属性行映射BeanPropertyRowMapper
+    //Account实体类一定要有无参构造函数
+    //返回的泛型T的List
+    List<Account> query = template.query("select * from account", new BeanPropertyRowMapper<Account>(Account.class));
+    System.out.println(query);
+    //[Account{name='dasima', money=10000.0}, Account{name='tom', money=200.0}, Account{name='alice', money=1000.0}]
+}
+@Test
+public void queryOne(){
+    //返回的就是一个Account对象（实体类）
+    Account tom = template.queryForObject("select * from account where name=?", new BeanPropertyRowMapper<Account>(Account.class), "tom");
+    System.out.println(tom);//Account{name='tom', money=200.0}
+}
+
+@Test
+//聚合查询
+//requiredType
+public void queryCount(){
+    Long aLong = template.queryForObject("select count(*) from account", Long.class);
+    System.out.println(aLong);//3
+}
+```
+
+
+
+
+
+
+
+# 声明式事务控制
+
+
+
+## 编程式事务控制相关对象
+
+
+
+---
+
+`PlatformTransactionManager`  平台事务管理器
+
+
+
+PlatformTransactionManager 接口是 spring 的事务管理器，它里面提供了我们常用的**操作事务的方法**。
+
+![image-20210128183533867](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210128183533867.png)
+
+
+
+注意：
+
+PlatformTransactionManager 是**接口**类型，**不同的 Dao 层技术**则有不同的实现类：
+
+Dao 层技术是jdbc 或 mybatis 时：org.springframework.jdbc.datasource.**DataSourceTransactionManager** 
+
+Dao 层技术是hibernate时：org.springframework.orm.hibernate5.**HibernateTransactionManager**
+
+
+
+**需要通过配置告知spring用的到底是哪种dao层技术事务处理对象**
+
+
+
+---
+
+
+
+`TransactionDefinition`
+
+> 也要进行配置，事务的参数要让spring框架知道，隔离级别, 超时时间....
+
+
+
+TransactionDefinition 是事务的定义信息对象，**封装了一些事务的相关参数**，里面有如下方法：
+
+
+
+![image-20210128184935970](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210128184935970.png)
+
+
+
+1. 事务隔离级别
+
+   设置隔离级别，可以解决事务并发产生的问题，如脏读、不可重复读和虚读。
+
+   - ISOLATION_DEFAULT
+
+   - ISOLATION_READ_UNCOMMITTED
+
+   - ISOLATION_READ_COMMITTED
+
+   - ISOLATION_REPEATABLE_READ
+
+   - ISOLATION_SERIALIZABLE
+
+
+
+2. 事务传播行为：解决一个业务方法调用另一个业务方法时，事务统一性的问题
+
+
+
+A方法调B方法，B看   A业务方法当前有没有事务:
+
+- **REQUIRED：如果当前没有事务，就新建一个事务，如果已经存在一个事务中，加入到这个事务中。一般的选择（默认值）**
+
+- **SUPPORTS：支持当前事务，如果当前没有事务，就以非事务方式执行（没有事务）**
+
+- MANDATORY：使用当前的事务，如果当前没有事务，就抛出异常
+
+- REQUERS_NEW：新建事务，如果当前在事务中，把当前事务挂起。
+
+- NOT_SUPPORTED：以非事务方式执行操作，如果当前存在事务，就把当前事务挂起
+
+- NEVER：以非事务方式运行，如果当前存在事务，抛出异常
+
+- NESTED：如果当前存在事务，则在嵌套事务内执行。如果当前没有事务，则执行 REQUIRED 类似的操作
+
+- 超时时间：默认值是-1，没有超时限制。如果有，以秒为单位进行设置
+
+- 是否只读：建议查询时设置为只读
+
+
+
+
+
+---
+
+
+
+`TransactionStatus`
+
+**状态信息需要通过配置来告诉spring去维护，是一个*被动信息*，运行过程中改变**
+
+
+
+TransactionStatus 接口提供的是事务具体的**运行状态**，方法介绍如下。
+
+
+
+![image-20210128192259367](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210128192259367.png)
+
+
+
+
+
+> PlatformTransactionManager + TransactionDefinition = TransactionStatus
+
+
+
  
 
 
 
+## 基于XML的声明式事务控制
+
+
+
+声明式事务控制：Spring 的声明式事务顾名思义就是采用**声明的方式来处理事务**。这里所说的声明，就是指在**配置文件中声明**，用在 Spring 配置文件中声明式的处理事务来**代替代码式的处理事务**。
+
+
+
+**声明式事务处理的作用**
+
+- ***事务管理不侵入开发的组件（解耦  系统层 ---业务层）***。具体来说，业务逻辑对象就不会意识到正在事务管理之中，事实上也应该如此，因为事务管理是属于系统层面的服务，而不是业务逻辑的一部分，如果想要改变事务管理策划的话，也只需要在定义文件中重新配置即可
+- 在**不需要事务管理**的时候，只要在**设定文件上修改一下**，即可移去事务管理服务，无需改变代码重新编译，这样维护起来极其方便
+
+
+
+> **注意：Spring 声明式事务控制底层就是AOP——切点：业务方法  增强：事务控制**
+
+
+
+
+
+在执行两个update任务时，两个不是同一个事务，一个结束再做另一个
+
+
+
+
+
+**把开启事务、提交事务提取出去，当做切面，作为增强。AOP**
+
+
+
+
+
+
+
+### 声明式事务控制的实现
+
+
+
+声明式事务控制明确事项：
+
+- 谁是切点？被增强的方法，**业务方法（转账方法）**
+- 谁是通知？**事务控制**
+- 配置切面？
+
+
+
+
+
+一定不能忘了这个依赖，以为有了spring的aspectj就不用这个了。
+
+
+
+```xml
+<dependency>
+    <groupId>org.aspectj</groupId>
+    <artifactId>aspectjweaver</artifactId>
+    <version>1.9.2</version>
+</dependency>
+```
+
+
+
+
+
+
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
+">
+
+
+    <context:property-placeholder location="classpath:jdbc.properties"/>
+
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+        <property name="driverClass" value="${jdbc.Driver}"/>
+        <property name="jdbcUrl" value="${jdbc.url}"/>
+        <property name="user" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+    </bean>
+
+    <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <bean id="accountDao" class="com.example.dao.impl.AccountDaoImpl">
+        <property name="jdbcTemplate" ref="jdbcTemplate"/>
+    </bean>
+<!--    目标对象内部的方法就是切点-->
+    <bean id="accountService" class="com.example.service.impl.AccountServiceImpl">
+        <property name="accountDao" ref="accountDao"/>
+    </bean>
+
+    
+    
+<!--    配置平台事务管理器  connection.commit()  要从datasource中获取connection-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+<!--    通知 事务的增强  平台事务管理器-->
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <tx:method name="*"/>
+        </tx:attributes>
+    </tx:advice>
+
+<!--    配置事务的AOP织入   增强方法就是txAdvice-->
+    <aop:config>
+        <aop:advisor advice-ref="txAdvice" pointcut="execution(* com.example.service.impl.*.*(..))"/>
+    </aop:config>
+
+</beans>
+```
+
+
+
+```java
+public void transfer(String outMan, String inMan, double money) throws SQLException {
+    //开启事务
+    System.out.println("transfer");
+    accountDao.out(outMan, money);
+    int i = 1 / 0;//并没有对transfer方法进行一个统一的事务控制，out少了，但in并没有多
+    accountDao.in(outMan, money);//我人傻了，原来显示没更新是因为先加后减操作了同一个对象。。难受
+    //提交事务
+}
+```
+
+两个指令同时执行，或者同时不执行
+
+
+
+---
+
+
+
+```xml
+<!--    通知 事务的增强  平台事务管理器-->
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes><!-- 设置事务属性信息   TransactionDefinition-->
+            <tx:method name="*"/>  <!-- 哪些方法被增强-->
+        </tx:attributes>
+    </tx:advice>
+```
+
+
+
+```xml
+<tx:attributes>
+    <tx:method name="*" isolation="DEFAULT" propagation="REQUIRED" timeout="-1" read-only="false"/>
+</tx:attributes>
+```
+
+
+
+> 一个方法默认是一个事务
+>
+> **一个事务可以专门配置属于该事务自己的属性参数**
+>
+> **一个事务管理器管理多个不同的事务，每个事务都有自己的属性**
+>
+> 
+>
+> 为这个**切点方法**的**事务**来配置**参数**
+
+
+
+> 应该也是根据**后面配置的切点方法pointcut="execution(...)"  ---匹配---  tx:method **，来切换使用在      事务管理器中配置的**不同属性的事务**
+>
+> 每个事务对应这**不同的**业务层的方法
+
+```xml
+<!--    通知 事务的增强  平台事务管理器-->
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <tx:method name="transger" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="false"/>
+            <tx:method name="*"/>
+            <tx:method name="findAll" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="true"/>
+        </tx:attributes>
+    </tx:advice>
+```
+
+<tx:method> 代表切点方法的事务参数的配置
+
+- name：切点方法名称
+
+- isolation:事务的隔离级别
+
+- propogation：事务的传播行为
+
+- timeout：超时时间
+
+- read-only：是否只读
+
+
+
+-----
+
+
+
+**知识要点**
+
+声明式事务控制的配置要点
+
+- 平台事务管理器配置   `transaction-manager`
+- 事务通知的配置    `tx:method`
+- 事务AOP织入的配置    `aop:advisor`
+
+```xml
+<!--    配置事务的AOP织入   抽取-->
+    <aop:config>
+        <aop:pointcut id="pcut" expression="execution(* com.example.service.impl.*.*(..))"/>
+        <aop:advisor advice-ref="txAdvice" pointcut-ref="pcut"/>
+    </aop:config>
+```
+
+
+
+
+
+## 基于注解的声明式事务控制
 
 
 
@@ -2156,6 +2717,78 @@ public void pointCut(){}
 
 
 
+好像不配置也可以实现事务的功能？。。。
+
+```xml
+<!--事务的注解驱动  @EnableTransactionManagement
+开启事务管理支持, 相当于xml的:
+-->
+   <tx:annotation-driven transaction-manager="transactionManager"/>
+```
+
+![image-20210129002647928](../picture/Spring%E7%AC%94%E8%AE%B0/image-20210129002647928.png)
+
+
+
+```xml
+    <context:component-scan base-package="com.example"/>
+
+<!--    配置平台事务管理器  connection.commit()  要从datasource中获取connection-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+
+<!--事务的注解驱动-->
+    <tx:annotation-driven transaction-manager="transactionManager"/>
+```
+
+
+
+
+
+```java
+@Service("accountService")
+//@Transactional(isolation = Isolation.REPEATABLE_READ)//当前类下所有方法都用这个事务控制参数（就近原则）
+public class AccountServiceImpl implements AccountService {
+//    public void setAccountDao(AccountDao accountDao) {
+//        this.accountDao = accountDao;
+//    }
+    @Autowired
+    private AccountDao accountDao;
+
+    @Transactional(isolation = Isolation.READ_COMMITTED, propagation = Propagation.REQUIRED)
+    public void transfer(String outMan, String inMan, double money) throws SQLException {
+        //开启事务
+        accountDao.out(outMan, money);
+        int i = 1 / 0;//并没有对transfer方法进行一个统一的事务控制，out少了，但in并没有多
+        accountDao.in(inMan, money);
+        //提交事务
+    }
+    //@Transactional(isolation = Isolation.DEFAULT)
+    public void xxx(){
+
+    }
+}
+```
+
+
+
+---
+
+## 注解配置声明式事务控制解析
+
+
+
+①	使用 @Transactional 在需要进行事务控制的类或是方法上修饰，注解可用的**属性**同 xml 配置方式，例如隔离级别、传播行为等。
+
+②	注解使用在类上，那么该类下的**所有方法**都使用**同一套注解参数配置**。
+
+③	**使用在方法**上，不同的方法可以采用不同的事务参数配置。
+
+④	Xml配置文件中要开启事务的注解驱动<tx:annotation-driven />
+
+⑤	平台事务管理器配置（**xml方式**）
 
 
 
@@ -2163,47 +2796,50 @@ public void pointCut(){}
 
 
 
+```java
+@EnableTransactionManagement
+@ComponentScan("com.web.tx")
+@Configuration
+public class TxConfig {
+	
+	//数据源
+	@Bean
+	public DataSource dataSource() throws Exception{
+		ComboPooledDataSource dataSource = new ComboPooledDataSource();
+		dataSource.setUser("root");
+		dataSource.setPassword("123456");
+		dataSource.setDriverClass("com.mysql.jdbc.Driver");
+		dataSource.setJdbcUrl("jdbc:mysql://localhost:3306/test");
+		return dataSource;
+	}
+	
+	//
+	@Bean
+	public JdbcTemplate jdbcTemplate() throws Exception{
+		//Spring对@Configuration类会特殊处理；给容器中加组件的方法，多次调用都只是从容器中找组件
+		JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource());
+		return jdbcTemplate;
+	}
+	
+	//注册事务管理器在容器中
+	@Bean
+	public PlatformTransactionManager transactionManager() throws Exception{
+		return new DataSourceTransactionManager(dataSource());
+	}
+}
+```
 
 
 
+**@EnableTransactionManagement注解功能：开启基于注解的事务管理功能。**
 
+等同于以前xml配置：
 
+```xml
+<tx:annotation-driven transaction-manager="transactionManager"/>
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+另外需要注意注册事务管理器bean于Spring容器中。
 
 
 
