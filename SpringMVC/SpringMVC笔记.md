@@ -720,6 +720,10 @@ return "success";
 
 直接返回字符串：此种方式会将返回的字符串与**视图解析器**的前后缀**拼接**后跳转
 
+> 不带前缀forward / redirect 就会尝试和视图解析器进行拼接
+>
+> 带前缀，如 `return "redirect:/role/list"` 就会直接跳转
+
 ![image-20210201225159242](../picture/SpringMVC%E7%AC%94%E8%AE%B0/image-20210201225159242.png)
 
 
