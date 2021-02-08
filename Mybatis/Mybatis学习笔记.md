@@ -614,6 +614,1196 @@ void rollback()
 
 
 
+# mybatis的Dao层实现
+
+
+
+## 传统开发方式
+
+
+
+UserMapperImpl实现
+
+```java
+public class UserMapperImpl implements UserMapper {
+    @Override
+    public List<User> findAll() throws IOException {
+        InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+        SqlSessionFactory sqlSessionFactory =  new SqlSessionFactoryBuilder().build(resourceAsStream);
+        SqlSession sqlSession = sqlSessionFactory.openSession();
+        List<User> userList  = sqlSession.selectList("userMapper.findAll");
+        return userList;
+    }
+}
+```
+
+
+
+```java
+public class ServiceDemo {
+    public static void main(String[] args) throws IOException {
+        //创建dao层对象  当前dao层实现是手动编写的
+        UserMapper userMapper = new UserMapperImpl();
+        System.out.println(userMapper.findAll());
+    }
+}
+```
+
+
+
+
+
+
+
+## 代理开发方式
+
+**`dao实现类`  大部分都是模板代码**
+
+
+
+采用 Mybatis 的代理开发方式实现 DAO 层的开发，这种方式是我们后面进入企业的主流。
+
+Mapper 接口开发方法只需要程序员编写**Mapper 接口**（**相当于Dao 接口**），由Mybatis 框架根据接口定义创建接口的动态代理对象，代理对象的方法体同上边Dao接口实现类方法。
+
+
+
+Mapper 接口开发需要遵循以下规范：
+
+**1) Mapper.xml文件中的`namespace`与`mapper接口`的全限定名相同**
+
+**2) Mapper接口方法名和Mapper.xml中定义的每个statement的id相同**
+
+**3) Mapper接口方法的输入参数类型和mapper.xml中定义的每个sql的parameterType的类型相同**
+
+**4) Mapper接口方法的输出参数类型和mapper.xml中定义的每个sql的resultType的类型相同**
+
+
+
+![image-20210207161716795](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210207161716795.png)
+
+
+
+
+
+```java
+public static void main(String[] args) throws IOException {
+
+    InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+
+    //没有实现，mybatis帮助实现的
+    UserMapper mapper = sqlSession.getMapper(UserMapper.class);
+    System.out.println(mapper.findAll());
+}
+```
+
+---
+
+
+
+带参数：
+
+```xml
+<!--    根据id进行查询-->
+    <select id="findById" parameterType="int" resultType="user">
+        select * from user where id=#{id}
+    </select>
+```
+
+
+
+```java
+public static void main(String[] args) throws IOException {
+
+    InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+
+    UserMapper mapper = sqlSession.getMapper(UserMapper.class);
+    System.out.println(mapper.findById(1));
+}
+```
+
+
+
+
+
+# MyBatis映射文件深入
+
+
+
+## 动态sql语句
+
+
+
+Mybatis 的映射文件中，前面我们的 SQL 都是比较简单的，有些时候业务逻辑复杂时，我们的 SQL是**动态变化**的，此时在前面的学习中 SQL 就不能满足要求了。
+
+
+
+参考的官方文档，描述如下：
+
+![image-20210207170051151](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210207170051151.png)
+
+
+
+
+
+### if
+
+
+
+![image-20210207171006397](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210207171006397.png)
+
+
+
+根据实体类的不同取值，使用不同的 SQL语句来进行查询。比如在 id如果不为空时可以根据id查询，如果username 不同空时还要加入用户名作为条件。这种情况在我们的多条件组合查询中经常会碰到。
+
+
+
+根据是否有条件，来看是否要加where标签
+
+```xml
+<select id="findByCondition" parameterType="user" resultType="user">
+    select * from user
+    <where>
+        <if test="id!=0">
+            and id=#{id}
+        </if>
+        <if test="username!=null">
+            and username=#{username}
+        </if>
+    </where>
+</select>
+```
+
+
+
+
+
+
+
+### foreach
+
+
+
+查询id=1  /  id=2  /   id=3
+
+`select * from user where id=1 or id=2  /  id in (1,2,3)`
+
+**所有要查询的id**
+
+
+
+> foreach标签的属性含义如下：
+>
+> - `<foreach>`标签用于遍历集合，它的属性：
+>
+> - collection：代表要遍历的集合元素类型(array...)，注意编写时不要写#{}
+>
+> - open：代表语句的开始部分
+>
+> - close：代表结束部分
+>
+> - item：代表遍历集合的每个元素，生成的变量名
+>
+> - sperator：代表分隔符
+
+
+
+```xml
+<select id="findByIds" parameterType="list" resultType="user">
+    select * from user
+    <where>
+        <foreach collection="list" open="id in(" close=")" item="id" separator=",">
+            #{id}
+        </foreach>
+    </where>
+</select>
+```
+
+
+
+
+
+![image-20210207175704493](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210207175704493.png)
+
+
+
+
+
+## sql片段抽取
+
+
+
+
+
+```xml
+<!--    对相同的语句进行抽取-->
+    <sql id="selectUser">select * from user</sql>
+
+
+<select id="findByIds" parameterType="list" resultType="user">
+    <include refid="selectUser"></include>
+    <where>
+        <foreach collection="list" open="id in(" close=")" item="id" separator=",">
+            #{id}
+        </foreach>
+    </where>
+</select>
+```
+
+
+
+
+
+
+
+# MyBatis核心配置文件深入
+
+
+
+
+
+## typeHandlers标签
+
+
+
+无论是 MyBatis 在预处理语句（PreparedStatement）中设置一个参数时，还是从结果集中取出一个值时， 都会用类型处理器将获取的值以合适的方式转换成 Java 类型。下表描述了一些默认的类型处理器（截取部分）。
+
+![image-20210207203426517](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210207203426517.png)
+
+
+
+可以重写类型处理器或**创建你自己的类型处理器**来处理**不支持的或非标准的类型**。具体做法为：实现 org.apache.ibatis.type.TypeHandler 接口， 或继承一个很便利的类 `org.apache.ibatis.type.BaseTypeHandler`， 然后可以选择性地将它映射到一个JDBC类型。
+
+
+
+
+
+需求：一个Java中的Date数据类型，我想将之存到数据库的时候存成一个1970年至今的毫秒数，取出来时**转换成java的Date**，即**java的Date与数据库的varchar毫秒值之间转换**。
+
+
+
+> 开发步骤：
+>
+> ①定义转换类继承类`BaseTypeHandler<T>`
+>
+> ②覆盖4个未实现的方法，其中`setNonNullParameter`为java程序设置数据到数据库的回调方法，`getNullableResult`为查询时 mysql的字符串类型转换成 java的Type类型的方法
+>
+> ③在MyBatis核心配置文件中进行注册
+
+
+
+![image-20210207205014205](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210207205014205.png)
+
+
+
+
+
+
+
+```java
+public class DateTypeHandler extends BaseTypeHandler<Date> {
+    @Override
+    public void setNonNullParameter(PreparedStatement preparedStatement, int i, Date date, JdbcType jdbcType) throws SQLException {
+        //负责将java类型转换成数据库需要的类型
+        long time = date.getTime();
+        preparedStatement.setLong(i, time);
+    }
+
+
+    //将数据库中类型转换成java类型
+    @Override
+    public Date getNullableResult(ResultSet resultSet, String s) throws SQLException {
+        //String参数是数据库中要转换的字段名称
+        //获取结果集中需要的数据(Long)  将其转换成Date类型  返回
+        long aLong = resultSet.getLong(s);
+        Date date = new Date(aLong);
+        return date;
+    }
+
+    @Override
+    public Date getNullableResult(ResultSet resultSet, int i) throws SQLException {
+        long aLong = resultSet.getLong(i);
+        Date date = new Date(aLong);
+        return date;
+    }
+
+    @Override
+    public Date getNullableResult(CallableStatement callableStatement, int i) throws SQLException {
+        long aLong = callableStatement.getLong(i);
+        Date date = new Date(aLong);
+        return date;
+    }
+}
+```
+
+
+
+```xml
+<!--    当只传递一个参数，写什么都行-->
+    <delete id="delete" parameterType="java.lang.Integer">
+        delete from user where id=#{id}
+    </delete>
+```
+
+
+
+
+
+
+
+## plugins标签
+
+
+
+MyBatis可以使用**第三方的插件**来对功能进行扩展，分页助手PageHelper是将**分页**的复杂操作进行封装，使用简单的方式即可获得分页的相关数据
+
+
+
+开发步骤：
+
+①导入通用PageHelper的坐标
+
+②在mybatis核心配置文件中配置PageHelper插件
+
+③测试分页数据获取
+
+
+
+`class com.github.pagehelper.PageHelper cannot be cast to class org.apache.ibatis.plugin.Interceptor`
+
+> **在PageHelper5版本中MyBatis的插件指定不为PageHelper**，解决办法：
+>
+> 1. 将Maven依赖改为版本4
+> 2. 将插件配置改为`<plugin interceptor="com.github.pagehelper.PageInterceptor"/>`
+
+```xml
+<dependency>
+  <groupId>com.github.pagehelper</groupId>
+  <artifactId>pagehelper</artifactId>
+  <version>4.1.6</version>
+</dependency>
+```
+
+
+
+```xml
+<!--    配置分页助手插件-->
+    <plugins>
+        <plugin interceptor="com.github.pagehelper.PageHelper">
+            <property name="dialect" value="mysql"/>
+        </plugin>
+    </plugins>
+```
+
+
+
+```java
+public static void main(String[] args) throws IOException {
+
+    InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+
+    //设置分页相关参数   当前页  +  每页显示的条数
+    PageHelper.startPage(2, 3);
+
+    UserMapper mapper = sqlSession.getMapper(UserMapper.class);
+    List<User> userList = mapper.findAll();
+    for(User user : userList){
+        System.out.println(user);
+    }
+    sqlSession.close();
+}
+```
+
+
+
+---
+
+
+
+直接打印userList:
+
+`Page{count=true, pageNum=2, pageSize=3, startRow=3, endRow=6, total=7, pages=3, countSignal=false, orderBy='null', orderByOnly=false, reasonable=false, pageSizeZero=false}`
+
+**显示了pageInfo的各种信息**
+
+```java
+//其他分页的数据
+PageInfo<User> pageInfo = new PageInfo<User>(userList);
+System.out.println("总条数："+pageInfo.getTotal());
+System.out.println("总页数："+pageInfo.getPages());
+System.out.println("当前页："+pageInfo.getPageNum());
+System.out.println("每页显示长度："+pageInfo.getPageSize());
+System.out.println("是否第一页："+pageInfo.isIsFirstPage());
+System.out.println("是否最后一页："+pageInfo.isIsLastPage());
+```
+
+
+
+
+
+---
+
+
+
+MyBatis核心配置文件常用标签：
+
+1、`properties`标签：该标签可以加载外部的properties文件
+
+2、`typeAliases`标签：设置类型别名
+
+3、`environments`标签：数据源环境配置标签
+
+4、`typeHandlers`标签：配置自定义类型处理器
+
+5、`plugins`标签：配置MyBatis的插件
+
+
+
+
+
+
+
+
+
+# MyBatis多表查询
+
+
+
+## 一对一查询
+
+
+
+用户表和订单表的关系为，一个用户有多个订单，一个订单只从属于一个用户
+
+
+
+**一对一查询**的需求：查询一个订单，与此同时查询出该订单所属的用户
+
+
+
+![image-20210208015226299](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208015226299.png)
+
+
+
+
+
+---
+
+
+
+一对一查询的语句：
+
+
+
+```java
+public interface OrderMapper {
+    public List<Order> findAll();
+}
+```
+
+
+
+![image-20210208025810254](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208025810254.png)
+
+
+
+
+
+![image-20210208025013491](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208025013491.png)
+
+
+
+
+
+![image-20210208025748156](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208025748156.png)
+
+
+
+虽然在查询的结果中显示了User，但需要告诉mybatis：username属性是User类内部的属性，才能进行封装
+
+
+
+**order中没有 username  password字段，不能放到order中**
+
+![image-20210208025942553](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208025942553.png)
+
+
+
+
+
+```xml
+    <resultMap id="orderMap" type="order">
+<!--        手动去指定字段与实体属性的映射关系-->
+<!--   主键id     column:数据表的字段名称
+                  property：实体的属性名称        -->
+<!--        将查询出的oid属性与id映射-->
+        <id column="oid" property="id"/>
+        <result column="ordertime" property="ordertime"/>
+        <result column="total" property="total"/>
+        <result column="ordertime" property="ordertime"/>
+<!--        将uid往user类内部的属性封装-->
+        <result column="uid" property="user.id"/>
+        <result column="username" property="user.username"/>
+        <result column="password" property="user.password"/>
+        <result column="birthday" property="user.birthday"/>
+
+    </resultMap>
+
+<!--    查询操作-->
+    <select id="findAll" resultMap="orderMap">
+        SELECT *,o.id oid FROM orders o, user u where o.uid=u.id
+    </select>
+```
+
+
+
+
+
+
+
+![image-20210208030756624](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208030756624.png)
+
+
+
+
+
+
+
+
+
+```xml
+    <resultMap id="orderMap" type="order">
+<!--        手动去指定字段与实体属性的映射关系-->
+<!--   主键id     column:数据表的字段名称
+                  property：实体的属性名称        -->
+<!--        将查询出的oid属性与id映射-->
+        <id column="oid" property="id"/>
+        <result column="ordertime" property="ordertime"/>
+        <result column="total" property="total"/>
+        <result column="ordertime" property="ordertime"/>
+<!--        将uid往user类内部的属性封装-->
+<!--        <result column="uid" property="user.id"/>-->
+<!--        <result column="username" property="user.username"/>-->
+<!--        <result column="password" property="user.password"/>-->
+<!--        <result column="birthday" property="user.birthday"/>-->
+
+<!--        匹配  property：当前实体Order中的属性名称
+                  javaType：当前实体order中的属性的类型  定义别名-->
+        <association property="user" javaType="user">
+            <id column="uid" property="id"/>
+            <result column="username" property="username"/>
+            <result column="password" property="password"/>
+            <result column="birthday" property="birthday"/>
+        </association>
+    </resultMap>
+```
+
+
+
+
+
+
+
+## 一对多查询
+
+
+
+一对多查询的需求：查询一个用户，与此同时查询出**该用户具有的订单**
+
+
+
+![image-20210208164453204](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208164453204.png)
+
+
+
+sql语句：
+
+`select *,o.id oid from user u left join orders o on u.id=o.uid;`
+
+![image-20210208164438996](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208164438996.png)
+
+
+
+
+
+
+
+```xml
+<resultMap id="userMap" type="user">
+        <id column="uid" property="id"/>
+        <result column="username" property="username"/>
+        <result column="passowrd" property="password"/>
+        <result column="birthday" property="birthday"/>
+<!--        配置集合信息-->
+<!--        property: 集合名称
+            ofType:当前集合中的数据类型       -->
+        <collection property="orderList" ofType="order">
+<!--            封装order的数据-->
+            <id column="oid" property="id"/>
+            <result column="ordertime" property="ordertime"/>
+            <result column="total" property="total"/>
+        </collection>
+    </resultMap>
+
+<!--    查询操作-->
+    <select id="findAll" resultMap="userMap">
+        select *,o.id oid from user u, orders o where u.id=o.uid
+    </select>
+```
+
+
+
+```java
+@Test
+public void test4() throws IOException {
+    InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+
+    UserMapper mapper = sqlSession.getMapper(UserMapper.class);
+
+    List<User> userList = mapper.findAll();
+    for(User user : userList){
+        System.out.println(user);
+    }
+    sqlSession.close();
+}
+```
+
+
+
+
+
+![image-20210208165740876](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208165740876.png)
+
+
+
+
+
+
+
+
+
+
+
+## 多对多查询
+
+
+
+用户表和角色表的关系为，一个用户有多个角色，一个角色被多个用户使用
+
+多对多查询的需求：查询用户同时查询出该用户的所有角色
+
+
+
+![image-20210208192248725](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208192248725.png)
+
+
+
+
+
+![image-20210208212603500](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208212603500.png)
+
+
+
+`select * from user u, sys_role r, sys_user_role ur where u.id=ur.userId and ur.roleId=r.id`
+
+
+
+![image-20210208195807976](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208195807976.png)
+
+
+
+![image-20210208195754952](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208195754952.png)
+
+
+
+
+
+```xml
+    <resultMap id="userRoleMap" type="user">
+<!--        user的信息-->
+        <id column="userid" property="id"/>
+        <result column="username" property="username"/>
+        <result column="passowrd" property="password"/>
+        <result column="birthday" property="birthday"/>
+<!--         user内部的roleList信息   -->
+        <collection property="roleList" ofType="role">
+            <id column="roleid" property="id"/>
+            <result column="rolename" property="rolename"/>
+            <result column="roleDesc" property="roleDesc"/>
+        </collection>
+    </resultMap>
+
+    <select id="findUserAndRoleAll" resultMap="userRoleMap">
+        select * from user u, sys_role r, sys_user_role ur where u.id=ur.userId and ur.roleId=r.id
+    </select>
+```
+
+
+
+```java
+@Test
+public void test5() throws IOException {
+    InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+
+    UserMapper mapper = sqlSession.getMapper(UserMapper.class);
+
+    List<User> userList = mapper.findUserAndRoleAll();
+    for(User user : userList){
+        System.out.println(user);
+    }
+    sqlSession.close();
+}
+```
+
+
+
+-----
+
+
+
+小结：
+
+MyBatis多表配置方式：
+
+**一对一配置：使用`<resultMap>`还可以加  `<association>` 做配置**
+
+**一对多配置：使用`<resultMap>`+`<collection>`做配置**
+
+**多对多配置：使用`<resultMap>`+`<collection>`做配置**
+
+
+
+
+
+
+
+
+
+
+
+# MyBatis的注解开发
+
+
+
+注解开发越来越流行，Mybatis也可以使用注解开发方式，就可以减少编写Mapper映射文件了。
+
+> @Insert：实现新增
+>
+> @Update：实现更新
+>
+> @Delete：实现删除
+>
+> @Select：实现查询
+>
+> @Result：实现结果集封装
+>
+> @Results：可以与@Result 一起使用，封装多个结果集
+>
+> @One：实现一对一结果集封装
+>
+> @Many：实现一对多结果集封装
+
+
+
+
+
+## 增删改查
+
+
+
+```xml
+<!--    加载映射关系  通过注解配置-->
+    <mappers>
+<!--        指定扫描接口所在的包 -->
+        <package name="com.mybatisDemo.dao"/>
+    </mappers>
+```
+
+
+
+```java
+public interface UserMapper {
+
+    @Insert("insert into user values(#{id},#{username},#{password},#{birthday})")
+    public void save(User user);
+
+    @Update("update user set username=#{username}, password=#{password} where id=#{id}")
+    void update(User user);
+
+    @Delete("delete from user where id=#{id}")
+    void delete(int i);
+
+    @Select("select * from user where id=#{id}")
+    User findById(int id);
+
+    @Select("select * from user")
+    List<User> findAll();
+}
+```
+
+
+
+
+
+```java
+public class MyBatisTest {
+    private UserMapper mapper;
+
+    @Before
+    public void test1() throws IOException {
+        InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+        SqlSession sqlSession = sqlSessionFactory.openSession(true);
+        mapper = sqlSession.getMapper(UserMapper.class);
+    }
+
+    @Test
+    public void testSave(){
+        User user = new User();
+        user.setUsername("crh");
+        user.setPassword("123");
+        user.setBirthday(new Date());
+        mapper.save(user);
+    }
+
+    @Test
+    public void testUpdate(){
+        User user = new User();
+        user.setId(4);
+        user.setUsername("rch");
+        user.setPassword("123");
+        mapper.update(user);
+    }
+
+    @Test
+    public void testDelete(){
+        mapper.delete(3);
+    }
+
+    @Test
+    public void testFindById(){
+        System.out.println(mapper.findById(5));
+    }
+
+    @Test
+    public void testFindAll() throws IOException {
+        System.out.println(mapper.findAll());
+    }
+```
+
+
+
+
+
+
+
+
+
+## 复杂映射开发
+
+
+
+实现复杂关系映射之前我们可以在映射文件中通过配置`<resultMap>`来实现，使用注解开发后，我们可以使用`@Results`注解，`@Result`注解，`@One`注解，`@Many`注解组合完成复杂关系的配置
+
+
+
+
+
+![image-20210208231206156](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208231206156.png)
+
+
+
+
+
+![image-20210208231221029](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210208231221029.png)
+
+
+
+
+
+
+
+## 一对一查询
+
+
+
+```xml
+<!--    加载映射关系  通过注解配置-->
+    <mappers>
+<!--        指定接口所在的包 -->
+        <package name="com.mybatisDemo.dao"/>
+    </mappers>
+```
+
+
+
+```java
+public interface OrderMapper {
+
+    @Select("select *, o.id oid from orders o, user u where o.uid=u.id")
+    @Results({
+            @Result(column = "oid", property = "id"),
+            @Result(column = "ordertime", property = "ordertime"),
+            @Result(column = "total", property = "total"),
+            @Result(column = "uid", property = "user.id"),
+            @Result(column = "username", property = "user.username"),
+            @Result(column = "password", property = "user.password")
+    })
+    public List<Order> findAll();
+}
+```
+
+
+
+
+
+```java
+public class MyBatisTest2 {
+    private OrderMapper mapper;
+
+    @Before
+    public void test1() throws IOException {
+        InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+        SqlSession sqlSession = sqlSessionFactory.openSession(true);
+        mapper = sqlSession.getMapper(OrderMapper.class);
+    }
+
+
+
+    @Test
+    public void testFindAll() throws IOException {
+        System.out.println(mapper.findAll());
+    }
+
+}
+```
+
+
+
+
+
+
+
+-----
+
+
+
+```java
+public interface OrderMapper {
+    
+    @Select("select * from orders")
+    @Results({
+            @Result(column = "id", property = "id"),
+            @Result(column = "ordertime", property = "ordertime"),
+            @Result(column = "total", property = "total"),
+            @Result(
+                   property = "user", //要封装的属性名称
+                   column = "uid",   //根据哪个字段去查询user表的数据
+                   javaType = User.class,  //要封装的实体类型
+                    
+                   //select属性：查询哪个接口的方法去获得数据
+                   one = @One(select = "com.mybatisDemo.dao.UserMapper.findById")
+            )
+    })
+    public List<Order> findAll();
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+## 一对多查询
+
+
+
+一对多查询的需求：查询一个用户，与此同时查询出该用户具有的订单
+
+![image-20210209013454884](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209013454884.png)
+
+
+
+
+
+
+
+![image-20210209013538616](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209013538616.png)
+
+
+
+UserMapper
+
+```java
+@Select("select * from user")
+@Results({
+        @Result(column = "id", property = "id"),
+        @Result(column = "username", property = "username"),
+        @Result(column = "password", property = "password"),
+        @Result(
+                property = "orderList",
+                column = "id",
+                javaType = List.class,
+                many = @Many(select = "com.mybatisDemo.dao.OrderMapper.findByUid")
+        )
+}
+)
+public List<User> findUserAndOrderAll();
+```
+
+
+
+OrderMapper
+
+**使用OrderMapper中的接口方法   来根据uid查询当前用户的所有订单**
+
+```java
+public interface OrderMapper {
+    @Select("select * from orders where uid=#{uid}")
+    List<Order> findByUid(int uid);
+}
+```
+
+
+
+
+
+
+
+## 多对多查询
+
+
+
+
+
+多对多查询的需求：查询用户同时查询出该用户的所有角色
+
+
+
+![image-20210209023048095](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209023048095.png)
+
+
+
+
+
+**保存用户的角色信息**
+
+![image-20210209023149267](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209023149267.png)
+
+
+
+
+
+![image-20210209023525670](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209023525670.png)
+
+
+
+
+
+`select * from sys_user_role ur, sys_role r where ur.roleId=r.id and ur.userId=#{uid}`
+
+
+
+![image-20210209040124406](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209040124406.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+userMapper
+
+```java
+//多对多查询，需要三张表
+@Select("select * from user")
+@Results({
+        @Result(column = "id", property = "id"),
+        @Result(column = "username", property = "username"),
+        @Result(column = "password", property = "password"),
+        @Result(column = "birthday", property = "birthday"),
+
+        @Result(
+                property = "roleList",
+                column = "id",
+                javaType = List.class, //封装到集合中
+                //查出来的属性自动匹配进Role对象中
+                many = @Many(select = "com.mybatisDemo.dao.RoleMapper.findByUid")
+        )
+})
+public List<User> findUserAndRoleAll();
+```
+
+
+
+```java
+public interface RoleMapper {
+
+    @Select("select * from sys_user_role ur, sys_role r where ur.roleId=r.id and ur.userId=#{uid}")
+    //因为要查的是user对象，role为user对象的参数
+    //根据每个唯一的uid作为查找对象，  在中间表中匹配uid   再通过rid匹配role表中id
+    //最终找出uid对应的所有role对象
+    public List<Role> findByUid(int uid);
+}
+```
+
+
+
+**对每一个id都去查询所有对应的role**
+
+![image-20210209050123058](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209050123058.png)
+
+
+
+
+
+
+
+
+
+
+
+----
+
+
+
+![image-20210209045127963](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209045127963.png)
+
+这里的property是实体类中的属性名称，
+
+- 如果没有setter方法，则会在匹配上参数名称后自动生成setter方法
+- 如果属性名称无法对应，但又名字能对应的setter方法
+
+
+
+
+
+
+
+
+
+![image-20210209045533025](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209045533025.png)
 
 
 
@@ -637,30 +1827,80 @@ void rollback()
 
 
 
+# TIP
+
+
+
+## 将数据库结果封装到对象中
+
+
+
+使用的是`set`方法，根据**set后面的字段值**来匹配**数据库中的属性值**，而不是pojo对象中的 **参数名称**
+
+
+
+![image-20210209043412163](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209043412163.png)
+
+
+
+```java
+public void setRolena(String rolename) {
+    this.rolena = rolename;
+}
+//[Role{id=3, rolename='null', roleDesc='写代码'}]
+```
+
+
+
+```java
+public void setRolename(String rolena) {
+    this.rolena = rolena;
+}
+//[Role{id=3, rolename='programmer', roleDesc='写代码'}]
+```
+
+
+
+---
 
 
 
 
 
+另一个例子：
+
+```java
+private String roleDess;
+
+public void setRoleDesc(String roleDes) {
+    this.roleDess = roleDes;
+}
+//[Role{id=3, rolename='programmer', roleDesc='写代码'}]
+```
+
+**充分说明mybatis就只是根据set方法的名称来判断匹配数据库的哪一个属性的**
+
+
+
+**并且也不区分大小写**
 
 
 
 
 
+```java
+private String username;
+
+public void setUserna(String username) {
+    this.username = username;
+}
+```
 
 
 
+![image-20210209050237449](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209050237449.png)
 
-
-
-
-
-
-
-
-
-
-
+**只能匹配到set方法，也可以实现封装到对象中的功能**
 
 
 
