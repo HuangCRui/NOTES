@@ -2709,16 +2709,6 @@ public void transfer(String outMan, String inMan, double money) throws SQLExcept
 
 
 
-
-
-
-
-
-
-
-
-好像不配置也可以实现事务的功能？。。。
-
 ```xml
 <!--事务的注解驱动  @EnableTransactionManagement
 开启事务管理支持, 相当于xml的:

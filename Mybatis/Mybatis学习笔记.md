@@ -1729,10 +1729,6 @@ public interface OrderMapper {
 
 
 
-
-
-
-
 userMapper
 
 ```java
@@ -1784,26 +1780,632 @@ public interface RoleMapper {
 
 
 
-----
 
 
 
-![image-20210209045127963](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209045127963.png)
 
-这里的property是实体类中的属性名称，
-
-- 如果没有setter方法，则会在匹配上参数名称后自动生成setter方法
-- 如果属性名称无法对应，但又名字能对应的setter方法
+# SSM框架整合
 
 
 
 
 
+## 原始方式整合
 
 
 
 
-![image-20210209045533025](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209045533025.png)
+
+实体类
+
+```java
+public class Account {
+    private int id;
+    private String name;
+    private double money;
+    //省略getter和setter方法
+}
+```
+
+
+
+
+
+mapper
+
+```java
+public interface AccountMapper {
+    //保存账户数据
+    void save(Account account);
+    //查询账户数据
+    List<Account> findAll();
+}
+```
+
+
+
+
+
+pom.xml
+
+```xml
+<dependency>
+  <groupId>org.springframework</groupId>
+  <artifactId>spring-context</artifactId>
+  <version>5.0.5.RELEASE</version>
+</dependency>
+<dependency>
+  <groupId>org.aspectj</groupId>
+  <artifactId>aspectjweaver</artifactId>
+  <version>1.8.7</version>
+</dependency>
+<dependency>
+  <groupId>org.springframework</groupId>
+  <artifactId>spring-jdbc</artifactId>
+  <version>5.0.5.RELEASE</version>
+</dependency>
+<dependency>
+  <groupId>org.springframework</groupId>
+  <artifactId>spring-tx</artifactId>
+  <version>5.0.5.RELEASE</version>
+</dependency>
+<dependency>
+  <groupId>org.springframework</groupId>
+  <artifactId>spring-test</artifactId>
+  <version>5.0.5.RELEASE</version>
+</dependency>
+<dependency>
+  <groupId>org.springframework</groupId>
+  <artifactId>spring-webmvc</artifactId>
+  <version>5.0.5.RELEASE</version>
+</dependency>
+
+<!--servlet和jsp-->
+<dependency>
+  <groupId>javax.servlet</groupId>
+  <artifactId>servlet-api</artifactId>
+  <version>2.5</version>
+</dependency>
+<dependency>
+  <groupId>javax.servlet.jsp</groupId>
+  <artifactId>jsp-api</artifactId>
+  <version>2.0</version>
+</dependency>
+
+<!--mybatis相关-->
+<dependency>
+  <groupId>org.mybatis</groupId>
+  <artifactId>mybatis</artifactId>
+  <version>3.4.5</version>
+</dependency>
+<dependency>
+  <groupId>org.mybatis</groupId>
+  <artifactId>mybatis-spring</artifactId>
+  <version>1.3.1</version>
+</dependency>
+<dependency>
+  <groupId>mysql</groupId>
+  <artifactId>mysql-connector-java</artifactId>
+  <version>8.0.13</version>
+</dependency>
+<dependency>
+  <groupId>c3p0</groupId>
+  <artifactId>c3p0</artifactId>
+  <version>0.9.1.2</version>
+</dependency>
+
+<dependency>
+  <groupId>junit</groupId>
+  <artifactId>junit</artifactId>
+  <version>4.12</version>
+</dependency>
+<dependency>
+  <groupId>javax.servlet</groupId>
+  <artifactId>jstl</artifactId>
+  <version>1.2</version>
+</dependency>
+
+<dependency>
+  <groupId>jstl</groupId>
+  <artifactId>jstl</artifactId>
+  <version>1.2</version>
+</dependency>
+```
+
+
+
+save页面
+
+```html
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<head>
+    <title>Title</title>
+</head>
+<body>
+    <h1>保存账户信息表单</h1>
+    <form action="${pageContext.request.contextPath}/save.action" method="post">
+        用户名称<input type="text" name="name"><br/>
+        账户金额<input type="text" name="money"><br/>
+        <input type="submit" value="保存"><br/>
+    </form>
+</body>
+</html>
+```
+
+
+
+accountList.jsp
+
+```html
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<html>
+<head>
+    <title>Title</title>
+</head>
+<body>
+
+    <h1>展示账户数据列表</h1>
+
+    <table>
+        <tr>
+            <th>账户id</th>
+            <th>账户名称</th>
+            <th>账户金额</th>
+        </tr>
+
+        <c:forEach items="${accountList}" var="account">
+            <tr>
+                <td>${account.id}</td>
+                <td>${account.name}</td>
+                <td>${account.money}</td>
+            </tr>
+        </c:forEach>
+
+    </table>
+
+</body>
+</html>
+```
+
+
+
+
+
+
+
+controller
+
+```java
+@Controller
+@RequestMapping("/account")
+public class AccountController {
+    @Autowired
+    private AccountService accountService;
+
+    //保存
+    @RequestMapping(value = "/save", produces = "text/html;charset=utf-8")
+    @ResponseBody//直接展示字符串
+    public String save(Account account) throws IOException {
+        accountService.save(account);
+        return "保存成功";
+    }
+
+    //查询
+    @RequestMapping("/findAll")
+    public ModelAndView findAll() throws IOException {
+        ModelAndView modelAndView = new ModelAndView();
+        List<Account> accountList = accountService.findAll();
+        modelAndView.addObject("accountList", accountList);
+        modelAndView.setViewName("accountList");
+        return modelAndView;
+    }
+}
+```
+
+
+
+
+
+service
+
+```java
+@Service("accountService")
+public class AccountServiceImpl implements AccountService {
+
+
+    @Override
+    public void save(Account account) throws IOException {
+        InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+        SqlSession sqlSession = sqlSessionFactory.openSession();
+        AccountMapper mapper = sqlSession.getMapper(AccountMapper.class);
+        mapper.save(account);
+        sqlSession.commit();
+        sqlSession.close();
+    }
+
+    @Override
+    public List<Account> findAll() throws IOException {
+        InputStream resourceAsStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(resourceAsStream);
+        SqlSession sqlSession = sqlSessionFactory.openSession();
+        AccountMapper mapper = sqlSession.getMapper(AccountMapper.class);
+        List<Account> accountList = mapper.findAll();
+        sqlSession.close();
+        return accountList;
+    }
+}
+```
+
+
+
+accountMapper
+
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ssmDemo.mapper.AccountMapper">
+    <insert id="save" parameterType="account">
+        insert into account values(#{id}, #{name}, #{money})
+    </insert>
+    
+    <select id="findAll" resultType="account">
+        select * from account
+    </select>
+</mapper>
+```
+
+
+
+
+
+sqlMapConfig
+
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD Config 3.0//EN" "http://mybatis.org/dtd/mybatis-3-config.dtd">
+
+
+<configuration>
+
+<!--    加载properties文件-->
+    <properties resource="jdbc.properties"/>
+
+    <typeAliases>
+<!--        <typeAlias type="com.ssmDemo.domain.Account" alias="account"/>-->
+        <package name="com.ssmDemo.domain"/>
+    </typeAliases>
+
+    <!--数据源环境-->
+    <environments default="development">
+        <environment id="development">
+            <!--事务管理器-->
+            <transactionManager type="JDBC"/>
+            <dataSource type="POOLED">
+                <property name="driver" value="${jdbc.driver}"/>
+                <property name="url" value="${jdbc.url}"/>
+                <property name="username" value="${jdbc.user}"/>
+                <property name="password" value="${jdbc.password}"/>
+            </dataSource>
+        </environment>
+    </environments>
+    
+    
+    <mappers>
+<!--        <mapper resource="com/ssmDemo/mapper/AccountMapper.xml"/>-->
+        <package name="com.ssmDemo.mapper"/>
+    </mappers>
+
+</configuration>
+```
+
+
+
+
+
+
+
+
+
+
+
+![image-20210210002450003](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210210002450003.png)
+
+中文字符显示乱码
+
+> 乱码过滤器设置的是请求数据时获取的编码
+
+```java
+//保存
+@RequestMapping(value = "/save", produces = "text/html;charset=utf-8")
+@ResponseBody//直接展示字符串
+public String save(Account account) throws IOException {
+    accountService.save(account);
+    return "保存成功";
+}
+```
+
+
+
+
+
+
+
+
+
+## spring整合mybatis
+
+
+
+
+
+弊端：
+
+service层每次都需要加载mybatis配置文件，手动提交
+
+
+
+**spring注入 accountMapper，直接使用**
+
+
+
+![image-20210210025235328](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210210025235328.png)
+
+
+
+
+
+
+
+---
+
+**将SqlSessionFactory配置到Spring容器中**
+
+
+
+mybatis中使用pooled，即mybatis配置的连接池
+
+![image-20210210032702557](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210210032702557.png)
+
+
+
+
+
+
+
+mybatis-spring 中，配置dataSource和配置文件
+
+`sqlSessionFactory`是一个接口， `sqlSessionFactoryBean`是它的实现类，配置到spring容器中
+
+![image-20210210031357996](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210210031357996.png)
+
+
+
+**其中dataSource使用c3p0连接池**
+
+
+
+
+
+
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/mvc
+http://www.springframework.org/schema/mvc/spring-mvc.xsd
+http://www.springframework.org/schema/tx
+http://www.springframework.org/schema/tx/spring-tx.xsd
+http://www.springframework.org/schema/aop
+http://www.springframework.org/schema/aop/spring-aop.xsd
+">
+
+
+    <context:component-scan base-package="com.ssmDemo">
+        <context:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+    </context:component-scan>
+
+    
+<!--加载配置文件-->
+    <context:property-placeholder location="classpath:jdbc.properties"/>
+
+    <!--    配置数据源对象-->
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+        <property name="driverClass" value="${jdbc.driver}"/>
+        <property name="jdbcUrl" value="${jdbc.url}"/>
+        <property name="user" value="${jdbc.user}"/>
+        <property name="password" value="${jdbc.password}"/>
+    </bean>
+
+<!--    配置sessionFactory-->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+<!--        connection连接源于datasource-->
+        <property name="dataSource" ref="dataSource"/>
+<!--        mybatis配置信息/映射/...-->
+        <property name="configLocation" value="classpath:sqlMapConfig.xml"/>
+    </bean>
+
+    
+<!--    扫描mapper所在的包 为mapper创建实现类-->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.ssmDemo.mapper"/>
+    </bean>
+
+    
+    
+<!--    声明式事务控制-->
+<!--    平台事务管理器-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+<!--     通知 事务的增强  平台事务管理器-->
+    <tx:advice id="txAdvice">
+        <tx:attributes>
+            <tx:method name="*"/>
+        </tx:attributes>
+    </tx:advice>
+
+<!--    事务的aop织入-->
+    <aop:config>
+        <aop:advisor advice-ref="txAdvice" pointcut="execution(* com.ssmDemo.service.impl.*.*(..))"/>
+    </aop:config>
+
+    
+</beans>
+```
+
+
+
+
+
+springMapConfig.xml
+
+```xml
+    <typeAliases>
+<!--        <typeAlias type="com.ssmDemo.domain.Account" alias="account"/>-->
+        <package name="com.ssmDemo.domain"/>
+    </typeAliases>
+```
+
+
+
+
+
+
+
+```java
+@Service("accountService")
+public class AccountServiceImpl implements AccountService {
+
+    //扫描完mapper接口后  spring会自动创建接口的实现，并存放到容器中，直接注入即可
+    @Autowired
+    private AccountMapper accountMapper;
+
+    @Override
+    public void save(Account account) throws IOException {
+        accountMapper.save(account);
+
+    }
+
+    @Override
+    public List<Account> findAll() throws IOException {
+        return accountMapper.findAll();
+
+    }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1908,6 +2510,22 @@ public void setUserna(String username) {
 
 
 
+----
+
+
+
+![image-20210209045127963](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209045127963.png)
+
+这里的property是实体类中的属性名称，
+
+- 如果没有setter方法，则会在匹配上参数名称后自动生成setter方法
+- 如果属性名称无法对应，但又名字能对应的setter方法
+
+
+
+
+
+![image-20210209045533025](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209045533025.png)
 
 
 
@@ -1921,6 +2539,41 @@ public void setUserna(String username) {
 
 
 
+
+
+
+
+## jstl包
+
+
+
+导入失败？
+
+
+
+![image-20210210003614158](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210210003614158.png)
+
+
+
+这是一个Jar包的问题，我原来引入的jar是：
+
+```xml
+<dependency>
+  <groupId>jstl</groupId>
+  <artifactId>jstl</artifactId>
+  <version>1.2</version>
+</dependency>
+```
+
+**改成这样就行：**
+
+```xml
+<dependency>
+  <groupId>javax.servlet</groupId>
+  <artifactId>jstl</artifactId>
+  <version>1.2</version>
+</dependency>
+```
 
 
 
