@@ -1,4 +1,4 @@
-
+ 
 
 
 
@@ -1577,7 +1577,7 @@ The auto-configuration adds the following features on top of Spring’s defaults
 
 > If you want to keep those Spring Boot MVC customizations and make more [MVC customizations](https://docs.spring.io/spring/docs/5.2.9.RELEASE/spring-framework-reference/web.html#mvc) (interceptors, formatters, view controllers, and other features), you can add your own `@Configuration` class of type `WebMvcConfigurer` but **without** `@EnableWebMvc`.
 >
-> **不用@EnableWebMvc注解。使用** **`@Configuration`** **+** **`WebMvcConfigurer`** **自定义规则**
+> **不用@EnableWebMvc注解。使用** **`@Configuration`** **+** **`WebMvcConfigurer（组件名称）`** **自定义规则**
 
 
 
@@ -1854,7 +1854,7 @@ protected void addResourceHandlers(ResourceHandlerRegistry registry) {
     //webjars的访问规则
     addResourceHandler(registry, "/webjars/**", "classpath:/META-INF/resources/webjars/");
     
-    //静态资源路径的配置规则      				/**	 ↓
+    //静态资源路径前缀的配置规则      				/**	 ↓
     addResourceHandler(registry, this.mvcProperties.getStaticPathPattern(), (registration) -> {
         registration.addResourceLocations(this.resourceProperties.getStaticLocations());
         if (servletContext != null) {
@@ -1921,6 +1921,8 @@ spring:
 
 
 ---
+
+
 
 
 
@@ -1999,11 +2001,397 @@ public WelcomePageHandlerMapping welcomePageHandlerMapping(ApplicationContext ap
 
 
 
-
-
-
-
 ### 请求映射
+
+
+
+#### Rest使用与原理
+
+
+
+
+
+- xxxMapping
+- Rest风格支持（用HTTP请求方式动词来表示对资源的操作）
+  - 以前： /getUser 获取用户    /deleteUser 删除用户	  /editUser  修改用户   /saveUser  保存用户
+  - 现在：**几个方法的请求路径都是/user**   GET-获取用户 	DELETE-删除用户   PUT-修改用户     POST-保存用户
+  - 核心FIlter：HiddenHttpMethodFilter
+    - 用法：表单method=post，隐藏域 _method=put
+
+
+
+
+
+```html
+<form action="/user" method="get">
+    <input type="submit" value="REST-GET">
+</form>
+<form action="/user" method="post">
+    <input type="submit" value="REST-POST">
+</form>
+<!--默认当成get方式GET-张三-->
+<form action="/user" method="delete">
+    <input type="submit" value="REST-DELETE">
+</form>
+<form action="/user" method="put">
+    <input type="submit" value="REST-PUT">
+</form>
+```
+
+
+
+
+
+
+
+
+
+
+
+```java
+//WebMvcAutoConfiguration
+@Bean
+//两个条件
+@ConditionalOnMissingBean(HiddenHttpMethodFilter.class)
+//配置文件中的属性，默认是不开启，需要修改配置文件来开启
+@ConditionalOnProperty(prefix = "spring.mvc.hiddenmethod.filter", name = "enabled", matchIfMissing = false)
+public OrderedHiddenHttpMethodFilter hiddenHttpMethodFilter() {
+   return new OrderedHiddenHttpMethodFilter();
+}
+
+
+public class HiddenHttpMethodFilter extends OncePerRequestFilter {
+    private static final List<String> ALLOWED_METHODS;
+    public static final String DEFAULT_METHOD_PARAM = "_method";
+    private String methodParam = "_method";
+  
+```
+
+**_method属性作为真正的请求方式**
+
+
+
+只有表单是POST方式，才会去寻找`methodParam`参数对应的值
+
+```java
+protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    HttpServletRequest requestToUse = request;
+    if ("POST".equals(request.getMethod()) && request.getAttribute("javax.servlet.error.exception") == null) {
+        String paramValue = request.getParameter(this.methodParam);//methodParam = "_method"
+        if (StringUtils.hasLength(paramValue)) {
+            String method = paramValue.toUpperCase(Locale.ENGLISH);
+            if (ALLOWED_METHODS.contains(method)) {
+                requestToUse = new HiddenHttpMethodFilter.HttpMethodRequestWrapper(request, method);
+            }
+        }
+    }
+
+    filterChain.doFilter((ServletRequest)requestToUse, response);
+}
+```
+
+
+
+故修改表单：
+
+```html
+<form action="/user" method="get">
+    <input type="submit" value="REST-GET">
+</form>
+<form action="/user" method="post">
+    <input type="submit" value="REST-POST">
+</form>
+<!--默认当成get方式GET-张三-->
+<form action="/user" method="post">
+    <input name="_method" type="hidden" value="DELETE">
+    <input type="submit" value="REST-DELETE">
+</form>
+<form action="/user" method="post">
+    <input name="_method" type="hidden" value="PUT">
+    <input type="submit" value="REST-PUT">
+</form>
+```
+
+
+
+```yaml
+spring:
+  banner:
+    location: classpath:noBug.txt
+  web:
+    resources:
+      add-mappings: true
+      cache:
+        period: 1100
+      static-locations: classpath:/hh
+  mvc:
+    hiddenmethod:
+      filter:
+        enabled: true
+```
+
+
+
+----
+
+
+
+
+
+Rest原理：（表单提交要使用REST的时候）
+
+- 表单提交会带上_method=PUT
+
+- 请求过来会被HiddenHttpMethodFilter拦截
+
+  - 获取到_method的值：`String paramValue = request.getParameter(this.methodParam);`
+
+    ![image-20210214161616486](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214161616486.png)
+
+  - 转成大写 `String method = paramValue.toUpperCase(Locale.ENGLISH);
+
+  - 允许的请求方式：
+
+    ```java
+    static {
+        ALLOWED_METHODS = Collections.unmodifiableList(Arrays.asList(HttpMethod.PUT.name(), HttpMethod.DELETE.name(), HttpMethod.PATCH.name()));
+    }
+    ```
+
+    - 兼容 PUT DELETE PATCH请求
+
+  - 原生request（post），包装模式requestWrapper重写了getMethod方法，返回的是 **传入的值(_method的值)**
+
+    ![image-20210214182037119](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214182037119.png)
+
+  - 过滤器链方形的时候用wrapper，以后的方法调用getMethod是调用Wrapper的method
+
+    ```java
+    @RequestMapping(value = "/user",method = RequestMethod.PUT)
+    public String putUser(HttpServletRequest request){
+        return "PUT-张三" + request.getMethod();//PUT
+    }
+    ```
+
+
+
+Rest使用客户端工具
+
+- 使用POSTMAN可以直接发请求，从http层面：发过来的就是Delete请求，不需要进行转换，直接跳过这一步。**无需Filter**
+
+  ![image-20210214182519019](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214182519019.png)
+
+
+
+-----
+
+
+
+使用：
+
+```java
+@PutMapping("/user")
+@DeleteMapping("/user")
+@GetMapping("/user")
+@PostMapping("/user")
+```
+
+
+
+```java
+@RequestMapping(
+    method = {RequestMethod.GET}
+)
+public @interface GetMapping {
+```
+
+
+
+
+
+----
+
+
+
+**扩展：如何将_method变成其他名字**
+
+
+
+```java
+@Bean
+//自己放一个HiddenHttpMethodFilter
+@ConditionalOnMissingBean(HiddenHttpMethodFilter.class)
+@ConditionalOnProperty(prefix = "spring.mvc.hiddenmethod.filter", name = "enabled", matchIfMissing = false)
+public OrderedHiddenHttpMethodFilter hiddenHttpMethodFilter() {
+   return new OrderedHiddenHttpMethodFilter();
+}
+```
+
+
+
+```java
+@Configuration(proxyBeanMethods = false)
+public class WebConfig {
+
+    @Bean
+    public HiddenHttpMethodFilter hiddenHttpMethodFilter(){
+        HiddenHttpMethodFilter hiddenHttpMethodFilter = new HiddenHttpMethodFilter();
+        //private String methodParam = "_method";可以改变
+        hiddenHttpMethodFilter.setMethodParam("_m");
+        return hiddenHttpMethodFilter;
+    }
+}
+```
+
+![image-20210214183812109](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214183812109.png)
+
+
+
+修改为： 
+
+```html
+<form action="/user" method="post">
+    <input name="_m" type="hidden" value="PUT">
+    <input type="submit" value="REST-PUT">
+</form>
+```
+
+成功！
+
+
+
+
+
+
+
+#### 请求映射原理
+
+
+
+![image-20210214203500127](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214203500127.png)
+
+
+
+所有对springmvc功能分析，都从`DispatcherServlet` -> `doDispatch()`方法开始
+
+
+
+
+
+![image-20210214204157035](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214204157035.png)
+
+
+
+**如何从 /user请求找到调用deleteUser()方法来处理的？**
+
+
+
+![image-20210214204410802](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214204410802.png)
+
+
+
+
+
+```java
+//找到当前请求使用哪个Handler（Controller中的方法）来处理
+mappedHandler = this.getHandler(processedRequest);
+if (mappedHandler == null) {
+    this.noHandlerFound(processedRequest, response);
+    return;
+}
+```
+
+
+
+-----
+
+
+
+**HandlerMapping：处理器映射**
+
+
+
+
+
+![image-20210214204746597](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214204746597.png)
+
+
+
+
+
+RequestMappingHandlerMapping：保存了所有@RequestMapping和handler的映射规则。
+
+扫描所有的controller，保存到handlerMapping中
+
+
+
+![image-20210214211132503](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214211132503.png)
+
+
+
+
+
+![image-20210214211349711](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214211349711.png)
+
+
+
+
+
+![image-20210214213213836](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214213213836.png)
+
+
+
+要求：同样的一个请求方式，只能有一个handler方法处理
+
+
+
+所有的请求映射都在HandlerMapping中。
+
+- Springboot自动配置 欢迎页的HandlerMapping。访问/能访问到index.html。**此时requestmapping无法找到**
+
+![image-20210214215434439](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214215434439.png)
+
+此时没有匹配的路径，找到的handler是null
+
+继续for循环，来到第二个handlermapping
+
+![image-20210214215533662](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214215533662.png)
+
+
+
+![image-20210214215557570](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214215557570.png)
+
+![image-20210214215642771](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214215642771.png)
+
+
+
+
+
+----
+
+
+
+同理：若是访问/delete
+
+![image-20210214215847337](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214215847337.png)
+
+也可以得到对应的handler
+
+
+
+
+
+
+
+- 请求进来，挨个尝试所有的HandlerMapping看是否有请求信息。
+  - 如果有就找到这个请求对应的handler
+  - 如果没有，就是下一个handlerMapping
+- springboot自动配置了默认的 `RequestMappingHandlerMapping`（**解析我们当前所有requestmapping方法**），`WelcomePageHandlerMapping`
+- 我们需要一些**自定义**的映射处理，也可以自己给容器中放HandlerMapping。`自定义HandlerMapping`
+
+
+
+ 
 
 
 
@@ -2022,6 +2410,329 @@ public WelcomePageHandlerMapping welcomePageHandlerMapping(ApplicationContext ap
 
 
 
+
+
+
+#### 注解
+
+
+
+`@PathVariable`
+
+**获取路径变量（将变量直接写在路径上）**
+
+```java
+//car/1/owner/zhangsan
+@GetMapping("/car/{id}/owner/{username}")
+public Map<String, Object> getCar(@PathVariable("id") Integer id, @PathVariable("username") String name,
+                                   @PathVariable Map<String, String> pv){
+    Map<String, Object> map = new HashMap<>();
+    map.put("id", id);
+    map.put("username", name);
+    map.put("pv", pv);
+    return map;
+}
+```
+
+![image-20210214232120349](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214232120349.png)
+
+---
+
+
+
+`RequestHeader`
+
+```java
+@RequestHeader("User-Agent") String userAgent,
+@RequestHeader Map<String, String> header//获取全部请求头，以Map的方式存储
+```
+
+![image-20210214232519795](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214232519795.png)
+
+
+
+---
+
+
+
+`@RequestParam`
+
+
+
+```java
+    @GetMapping("/car/{id}/owner/{username}")
+    public Map<String, Object> getCar(@PathVariable("id") Integer id, @PathVariable("username") String name,
+                                      @PathVariable Map<String, String> pv,
+                                      @RequestHeader("User-Agent") String userAgent,
+                                      @RequestHeader Map<String, String> header,
+                                      @RequestParam("age") int age,
+                                      @RequestParam("inter") List<String> inter,
+                                      @RequestParam Map<String, String> params){
+        Map<String, Object> map = new HashMap<>();
+        map.put("age", age);
+        map.put("inter", inter);
+        map.put("params", params);//map的key只能有一个，故而多个相同属性名的只会计算一次
+        return map;
+    }
+}
+```
+
+![image-20210214234238348](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210214234238348.png)
+
+
+
+
+
+----
+
+
+
+`@CookieValue`
+
+
+
+```java
+@CookieValue("JSESSIONID") String cookie
+@CookieValue("JSESSIONID") Cookie cook)//获取Cookie对象
+    
+    cook.getName() .getValue()
+```
+
+
+
+---
+
+
+
+`@RequestBody`
+
+**获取请求体：只有POST请求才有请求体**
+
+
+
+```html
+<form action="/save" method="post">
+    用户名：<input type="text" name="username"/><br>
+    邮箱：<input type="text" name="email"/><br>
+    <input type="submit" value="提交">
+</form>
+```
+
+```java
+@PostMapping("/save")
+public Map postMethod(@RequestBody String content){
+    Map<String, Object> map = new HashMap<>();
+    map.put("content", content);
+    return map;
+}
+```
+
+
+
+![image-20210215001328452](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215001328452.png)
+
+
+
+
+
+----
+
+
+
+`@RequestAttribute`
+
+**获取request域中存放的属性**
+
+
+
+**更多的是跳转到页面，页面用el表达式获取这个值${}**
+
+```java
+@GetMapping("/goto")
+public String goToPage(HttpServletRequest request){
+    request.setAttribute("msg", "成功了！");
+    request.setAttribute("code", 200);
+    return "forward:/success";  //  转发到/success请求  跳转才能保存request域中的数据
+}
+
+@ResponseBody
+@GetMapping("/success")
+public Map success(@RequestAttribute("msg") String msg,
+                      @RequestAttribute("code") Integer code,
+                      //转发到这里，用的是同一个请求
+                      HttpServletRequest request){
+    Object msg1 = request.getAttribute("msg");
+    Map<String, Object> map = new HashMap<>();
+    map.put("reqMethod", msg1);
+    map.put("anno_msg", msg);
+    map.put("anno_code", code);
+    return map;
+}
+```
+
+
+
+![image-20210215002815601](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215002815601.png)
+
+
+
+
+
+
+
+---
+
+
+
+
+
+`@MatrixVariable`
+
+
+
+/cars/{path}?xxx=xxx&aaa=bbb queryString 查询字符串。`@RequestParam`
+
+
+
+/cars/{path; low=34;brand=byd,audi,yd} : 矩阵变量
+
+页面开发，**cookie禁用了**，session里面的内容怎么使用
+
+**session，set(a, b)  ----->  jsessionid  --->  cookie ---->  每次发请携带**
+
+
+
+**url重写**：   /abc;jsessionid=xxxx    **把cookie的值使用矩阵变量的进行传递**
+
+k=v,v,v,v
+
+`;`后面是矩阵变量
+
+/boss/1;age=20/2;age=20   
+
+
+
+
+
+
+
+
+
+对于路径的处理：`UrlPathHelper`进行解析
+
+```java
+//UrlPathHelper
+
+private boolean removeSemicolonContent = true;//移除分号内容
+
+public void setRemoveSemicolonContent(boolean removeSemicolonContent) {
+    this.checkReadOnly();
+    this.removeSemicolonContent = removeSemicolonContent;
+}
+```
+
+![image-20210215023014756](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215023014756.png)
+
+将分号后的内容都删去
+
+
+
+```java
+public interface WebMvcConfigurer {
+    default void configurePathMatch(PathMatchConfigurer configurer) {
+    }
+```
+
+
+
+```java
+@Configuration(proxyBeanMethods = false)
+@Import(EnableWebMvcConfiguration.class)
+@EnableConfigurationProperties({ WebMvcProperties.class,
+      org.springframework.boot.autoconfigure.web.ResourceProperties.class, WebProperties.class })
+@Order(0)
+public static class WebMvcAutoConfigurationAdapter implements WebMvcConfigurer {//同样实现了WebMvcConfigurer接口
+```
+
+
+
+
+
+
+
+配置类：
+
+```java
+@Configuration
+//jdk8默认实现接口，无需每一个接口都实现
+public class WebConfig implements WebMvcConfigurer {
+
+//    @Bean //WebMvcConfigurer
+//    public WebMvcConfigurer webMvcConfigurer(){
+//        return new WebMvcConfigurer() {
+//            @Override
+//            public void configurePathMatch(PathMatchConfigurer configurer) {
+//                UrlPathHelper urlPathHelper = new UrlPathHelper();
+//                //设置为不移除分号后面的内容，矩阵变量功能就可以生效
+//                urlPathHelper.setRemoveSemicolonContent(false);
+//                configurer.setUrlPathHelper(urlPathHelper);
+//            }
+//        };
+//    }
+
+    @Override
+    public void configurePathMatch(PathMatchConfigurer configurer) {
+        UrlPathHelper urlPathHelper = new UrlPathHelper();
+        //设置为不移除分号后面的内容，矩阵变量功能就可以生效
+        urlPathHelper.setRemoveSemicolonContent(false);
+        configurer.setUrlPathHelper(urlPathHelper);
+    }
+}
+```
+
+
+
+
+
+```java
+//   /cars/sell;low=34;brand=benz,audi,bmw   或者brand=benz;brand=audi...
+// springboot默认是禁用了矩阵变量的功能  手动开启
+//404：sell要写成路径变量的表示法。。
+//请求映射的时候：  矩阵变量必须有url路径变量才能被解析
+@GetMapping("/cars/{path}")
+public Map carsSell(@MatrixVariable("low") Integer low,
+                    @MatrixVariable("brand") List<String> brand,
+                    @PathVariable("path") String path){
+    Map<String,Object> map = new HashMap<>();
+
+    map.put("low",low);
+    map.put("brand",brand);
+    map.put("path",path);  //  sell 这个path就相当于后面所有属性的一个标题/代表，pathVar,紧跟在/后面，写完pathVar后再写一个个键值对（矩阵变量）
+    System.out.println(map);
+    return map;
+}
+```
+
+
+
+![image-20210215041124440](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215041124440.png)
+
+
+
+
+
+```java
+//  /boss/1;age=20/2;age=10
+@GetMapping("/boss/{bossId}/{empId}")
+//获得哪一个路径变量下age的值   不指定，默认第一个的值
+public Map boss(@MatrixVariable(value = "age", pathVar = "bossId")   Integer bossAge,
+                @MatrixVariable(value = "age", pathVar = "empId") Integer empAge){
+    Map<String,Object> map = new HashMap<>();
+    map.put("bossAge", bossAge);
+    map.put("empAge", empAge);
+    return map;
+}
+```
 
 
 
@@ -2047,7 +2758,33 @@ public WelcomePageHandlerMapping welcomePageHandlerMapping(ApplicationContext ap
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### 参数处理原理
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2341,9 +3078,41 @@ public WebMvcAutoConfigurationAdapter(WebProperties webProperties, WebMvcPropert
 
 
 
+## 需要注意是跳转页面还是返回值
 
 
 
+**血的教训！！！！！！**
+
+
+
+无论怎么尝试   都是返回404
+
+最后发现Controller方法上标注的注解是  `@Controller`  ，**应该使用 `@RestController`！！！！！！**
+
+难受啊。。
+
+
+
+> 并且记住：如果不跳转页面，一样需要@ResponseBody来标注，表明此时不需要去跳转页面，但同时也不返回数据
+
+```java
+//   /cars/sell;low=34;brand=benz,audi,bmw
+// springboot默认是禁用了矩阵变量的功能  手动开启
+//404：sell要写成路径变量的表示法。。
+@GetMapping("/cars/{path}")
+public Map carsSell(@MatrixVariable("low") Integer low,
+                    @MatrixVariable("brand") List<String> brand,
+                    @PathVariable("path") String path){
+    Map<String,Object> map = new HashMap<>();
+
+    map.put("low",low);
+    map.put("brand",brand);
+    map.put("path",path);
+    System.out.println(map);
+    return map;
+}
+```
 
 
 
