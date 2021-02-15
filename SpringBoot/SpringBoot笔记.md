@@ -2740,15 +2740,234 @@ public Map boss(@MatrixVariable(value = "age", pathVar = "bossId")   Integer bos
 
 
 
-
-
-### POJO封装过程
-
+#### Servlet API
 
 
 
+> WebRequest、ServletRequest、MultipartRequest、 HttpSession、javax.servlet.http.PushBuilder、Principal、InputStream、Reader、HttpMethod、Locale、TimeZone、ZoneId
 
 
+
+`HttpServletRequest request`
+
+![image-20210215192042072](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215192042072.png)
+
+
+
+**ServletRequestMethodArgumentResolver**支持解析的参数类型：
+
+**传入一下任意类型的参数均可**
+
+```java
+@Override
+    public boolean supportsParameter(MethodParameter parameter) {
+        Class<?> paramType = parameter.getParameterType();
+        return (WebRequest.class.isAssignableFrom(paramType) ||
+                ServletRequest.class.isAssignableFrom(paramType) ||
+                MultipartRequest.class.isAssignableFrom(paramType) ||
+                HttpSession.class.isAssignableFrom(paramType) ||
+                (pushBuilder != null && pushBuilder.isAssignableFrom(paramType)) ||
+                Principal.class.isAssignableFrom(paramType) ||
+                InputStream.class.isAssignableFrom(paramType) ||
+                Reader.class.isAssignableFrom(paramType) ||
+                HttpMethod.class == paramType ||
+                Locale.class == paramType ||
+                TimeZone.class == paramType ||
+                ZoneId.class == paramType);
+    }
+```
+
+
+
+判断类型
+
+![image-20210215211111095](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215211111095.png)
+
+
+
+获得request对象：
+
+**拿到原生的request请求并返回**
+
+![image-20210215211143652](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215211143652.png)
+
+
+
+
+
+
+
+
+
+#### 复杂参数
+
+
+
+**Map**、**Model（map、model里面的数据会被放在`request的请求域` ，相当于调用了 `request.setAttribute`）、**
+
+Errors/BindingResult、**RedirectAttributes（ 重定向携带数据）**、**ServletResponse（response）**、SessionStatus、UriComponentsBuilder、ServletUriComponentsBuilder
+
+
+
+
+
+```java
+@GetMapping("/params")
+public String testParam(Map<String, Object> map,
+                        Model model,
+                        HttpServletRequest request,
+                        HttpServletResponse response){
+    map.put("hello", "world");
+    model.addAttribute("world", "hello");
+    request.setAttribute("message", "HelloWorld");
+    Cookie cookie = new Cookie("c1", "v1");
+    cookie.setDomain("localhost");
+    response.addCookie(cookie);
+    return "forward:/success";
+}
+```
+
+
+
+> **表示了：给Map，Model，Request传入参数，都是保存在了Request域中**
+>
+> 使用 request.getAttribute来获取数据
+
+
+
+MapMethodPrecessor可以解析Map类型的参数：
+
+![image-20210216011613776](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216011613776.png)
+
+
+
+是Map，接下来解析，并放入缓存中
+
+![image-20210216011750457](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216011750457.png)
+
+
+
+得到了参数解析器后：
+
+![image-20210216011832255](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216011832255.png)
+
+
+
+
+
+接下来进行解析：`MapMethodPrecessor.resolveArgument()`
+
+![image-20210216012014648](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216012014648.png)
+
+
+
+![image-20210216012210635](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216012210635.png)
+
+
+
+Map类型的参数 ，会返回mavContainier.getModel()   ---->   `BindingAwareModelMap`  **是Model也是Map**
+
+
+
+----
+
+
+
+第二个参数是Model
+
+
+
+**`ModelMethodProcessor`**
+
+![image-20210216012620718](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216012620718.png)
+
+
+
+> **调用的是和MapMethodResolver 中一样的方法：`mavContainer.getModel()`**，来获取到值
+
+![image-20210216012713758](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216012713758.png)
+
+
+
+Map类型和Model类型，是一个对象 
+
+![image-20210216013615229](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216013615229.png)
+
+
+
+
+
+
+
+方法返回值：
+
+![image-20210216020017398](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216020017398.png)
+
+
+
+
+
+mavContainer中，看到model和map的值    都是同一个`BindingAwareModelMap`对象
+
+![image-20210216020844653](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216020844653.png)
+
+
+
+
+
+```java
+//ServletInvocableHandlerMethod
+//处理返回结果
+this.returnValueHandlers.handleReturnValue(returnValue, this.getReturnValueType(returnValue), mavContainer, webRequest);
+
+
+//HandlerMethodReturnValueHandlerComposite
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
+    HandlerMethodReturnValueHandler handler = this.selectHandler(returnValue, returnType);
+    if (handler == null) {
+        throw new IllegalArgumentException("Unknown return value type: " + returnType.getParameterType().getName());
+    } else {
+        handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);
+    }
+}
+
+
+//ViewNameMethodReturnValueHandler
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
+    if (returnValue instanceof CharSequence) {
+        String viewName = returnValue.toString();
+        //将视图名称存入mavContainer中
+        mavContainer.setViewName(viewName);
+        if (this.isRedirectViewName(viewName)) {
+            mavContainer.setRedirectModelScenario(true);
+        }
+    } else if (returnValue != null) {
+        throw new UnsupportedOperationException("Unexpected return type: " + returnType.getParameterType().getName() + " in method: " + returnType.getMethod());
+    }
+
+}
+
+```
+
+
+
+这是mavContainer就具备了模型和视图两个属性：
+
+![image-20210216021503503](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216021503503.png)
+
+
+
+
+
+> 后续步骤见参数处理流程.....
+
+
+
+
+
+
+
+#### 自定义对象参数
 
 
 
@@ -2778,6 +2997,520 @@ public Map boss(@MatrixVariable(value = "age", pathVar = "bossId")   Integer bos
 
 
 
+- HandlerMapping中只好到能处理请求的Handler(Controller.method()方法)
+
+- 为当前Handler找一个适配器`HandlerAdapter`(接口)
+
+  `HandlerAdapter ha = this.getHandlerAdapter(mappedHandler.getHandler());`
+
+  ![image-20210215150600061](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215150600061.png)
+
+  
+
+  ```java
+  protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletException {
+      if (this.handlerAdapters != null) {
+          Iterator var2 = this.handlerAdapters.iterator();
+  
+          while(var2.hasNext()) {
+              HandlerAdapter adapter = (HandlerAdapter)var2.next();
+              if (adapter.supports(handler)) {
+                  return adapter;
+              }
+          }
+      }
+  ```
+
+  有以下几种**HandlerAdapter**：
+
+  ![image-20210215145928952](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215145928952.png)
+
+  RequestMappingHandlerAdapter: 支持方法上标注**@RequestMapping**
+
+  HandlerFunctionAdapter：支持**函数式编程**
+
+  挨个匹配寻找合适的Adapter：
+
+  ![image-20210215150245965](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215150245965.png)
+
+
+
+
+
+- 执行目标方法：
+
+​		利用适配器来进行handle
+
+```java
+//DispatcherServler.doDispatch: 
+mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+```
+
+​	
+
+```java
+//AbstractHandlerMethodAdapter
+@Nullable
+public final ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+    return this.handleInternal(request, response, (HandlerMethod)handler);
+}
+
+		↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+//RequestMappingHandlerAdapter
+protected ModelAndView handleInternal{
+    //执行目标方法
+    mav = this.invokeHandlerMethod(request, response, handlerMethod);
+}
+```
+
+---
+
+- **参数解析器**
+
+  确定将要执行的目标方法的每一个参数的值
+
+  springmvc目标方法可以写多少种参数类型，取决于**参数类型解析器**。
+
+- ![image-20210215151327736](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215151327736.png)
+
+
+
+	1. 当前解析器是否支持解析当前参数
+ 	2. 支持：调用resolveArgument
+
+**`HandlerMethodArgumentResolver`是一个接口，各种类型的解析器都实现了这个接口并实现了`resolveArgument`这个方法，用来判断当前的参数解析器能否解析传入的这个`parameter`**
+
+![image-20210215151611641](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215151611641.png)
+
+
+
+----
+
+
+
+**返回值处理器**   **方法的返回值都写以下这些类型：** 
+
+![image-20210215161214079](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215161214079.png)
+
+
+
+
+
+将参数值解析器和返回值处理器都放入ServletInvocableHandlerMethod中
+
+![image-20210215161534328](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215161534328.png)
+
+![image-20210215161358688](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215161358688.png)
+
+
+
+
+
+执行并处理
+
+```java
+invocableMethod.invokeAndHandle(webRequest, mavContainer, new Object[0]);
+```
+
+
+
+这一步是执行目标方法的
+
+```java
+Object returnValue = this.invokeForRequest(webRequest, mavContainer, providedArgs);
+```
+
+
+
+```java
+@Nullable
+public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer, Object... providedArgs) throws Exception {
+    //获取方法的所有参数的值
+    Object[] args = this.getMethodArgumentValues(request, mavContainer, providedArgs);
+    if (logger.isTraceEnabled()) {
+        logger.trace("Arguments: " + Arrays.toString(args));
+    }
+		//利用反射调用目标方法
+    return this.doInvoke(args);
+}
+```
+
+
+
+![image-20210215162604174](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215162604174.png)
+
+
+
+
+
+```java
+//InvocableHandlerMethod
+protected Object[] getMethodArgumentValues(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer, Object... providedArgs) throws Exception {
+    MethodParameter[] parameters = this.getMethodParameters();
+    if (ObjectUtils.isEmpty(parameters)) {
+        return EMPTY_ARGS;
+    } else {
+        Object[] args = new Object[parameters.length];
+
+        for(int i = 0; i < parameters.length; ++i) {
+            MethodParameter parameter = parameters[i];
+            parameter.initParameterNameDiscovery(this.parameterNameDiscoverer);
+            args[i] = findProvidedArgument(parameter, providedArgs);
+            if (args[i] == null) {
+                //判断当前解析器是否支持解析当前参数类型
+                if (!this.resolvers.supportsParameter(parameter)) {
+                    throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
+                }
+
+                try {
+                    args[i] = this.resolvers.resolveArgument(parameter, mavContainer, request, this.dataBinderFactory);
+                } catch (Exception var10) {
+                    if (logger.isDebugEnabled()) {
+                        String exMsg = var10.getMessage();
+                        if (exMsg != null && !exMsg.contains(parameter.getExecutable().toGenericString())) {
+                            logger.debug(formatArgumentError(parameter, exMsg));
+                        }
+                    }
+
+                    throw var10;
+                }
+            }
+        }
+			//返回的args就是确定好的返回值
+        return args;
+    }
+```
+
+
+
+第几个参数，标了什么注解  索引位置     什么类型的参数
+
+![image-20210215164515163](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215164515163.png)
+
+
+
+
+
+挨个判断所有参数解析器哪个支持解析这个参数（当前判断的这个parameter）
+
+```java
+@Nullable
+private HandlerMethodArgumentResolver getArgumentResolver(MethodParameter parameter) {
+    //从缓存中获取解析器    如果有，直接获取到后就不用再去判断
+    HandlerMethodArgumentResolver result = (HandlerMethodArgumentResolver)this.argumentResolverCache.get(parameter);
+    if (result == null) {
+        Iterator var3 = this.argumentResolvers.iterator();
+
+        while(var3.hasNext()) {
+            HandlerMethodArgumentResolver resolver = (HandlerMethodArgumentResolver)var3.next();
+            //将每个参数   放到   每个参数解析器中  来判断当前解析器是否支持当前参数类型(注解)
+            if (resolver.supportsParameter(parameter)) {
+                result = resolver;
+                //当前resolver支持这个param，将他们放到缓存中，方便直接拿   缓存机制
+                this.argumentResolverCache.put(parameter, resolver);
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+```
+
+
+
+需要对每一个参数类型解析器都进行判断：一共27个
+
+![image-20210215165604202](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215165604202.png)
+
+
+
+
+
+直到以下这种情况：注解类型和resolver对应上了
+
+![image-20210215170056649](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215170056649.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+
+
+
+
+```java
+//判断当前解析器是否支持解析当前参数类型
+if (!this.resolvers.supportsParameter(parameter)) {
+    throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
+}
+
+//判断成功了 
+//判断完了支持解析当前参数，继续执行InvocableHandlerMethod.getMethodArgumentValues
+try {
+    args[i] = this.resolvers.resolveArgument(parameter, mavContainer, request, this.dataBinderFactory);
+```
+
+
+
+- 解析这个参数的值
+
+
+
+```java
+@Nullable
+public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer, NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+    //从缓存中 拿到当前这个参数的参数解析器  因为之前在判断支不支持参数解析器时已经放入了缓存
+    HandlerMethodArgumentResolver resolver = this.getArgumentResolver(parameter);
+    if (resolver == null) {
+        throw new IllegalArgumentException("Unsupported parameter type [" + parameter.getParameterType().getName() + "]. supportsParameter should be called first.");
+    } else {
+        return resolver.resolveArgument(parameter, mavContainer, webRequest, binderFactory);
+    }
+}
+```
+
+![image-20210215170706075](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215170706075.png)
+
+
+
+解析得到参数的名称和值
+
+
+
+都封装到了请求域中
+
+**注意：注解中的参数名称，和实际url中的参数名称是一一对应的，故可以直接得到**
+
+并且根据请求域中存放的不同类别的mapping，取出所有的kv对，再根据name来得到对应属性的值
+
+![image-20210215171448920](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215171448920.png)
+
+
+
+![image-20210215170959872](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215170959872.png)
+
+
+
+成功返回：
+
+![image-20210215171532561](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215171532561.png)
+
+
+
+
+
+@RequestHeader注解：
+
+
+
+![image-20210215173553316](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215173553316.png)
+
+
+
+
+
+
+
+----
+
+
+
+```java
+@Nullable
+public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer, Object... providedArgs) throws Exception {
+    //根据参数，得到所有参数的  值  如下图：
+    Object[] args = this.getMethodArgumentValues(request, mavContainer, providedArgs);
+    if (logger.isTraceEnabled()) {
+        logger.trace("Arguments: " + Arrays.toString(args));
+    }
+
+    return this.doInvoke(args);
+}
+```
+
+
+
+![image-20210215172018964](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215172018964.png)
+
+
+
+
+
+----
+
+
+
+再返回：
+
+
+
+```java
+public void invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer, Object... providedArgs) throws Exception {
+    Object returnValue = this.invokeForRequest(webRequest, mavContainer, providedArgs);
+```
+
+这里returnValue： 就是当前方法接受到的**所有参数及其值**
+
+![image-20210215163909674](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215163909674.png)
+
+
+
+----
+
+参数解析器的基本类型：`HandlerMethodArgumentResolver`
+
+有很多实现类
+
+![image-20210215175828347](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210215175828347.png)
+
+
+
+比如有  MatrixVariableMethodArgumentResolver ，就表示支持**@MatrixVariable**属性，这样这个参数解析器就会起作用
+
+
+
+
+
+
+
+----
+
+
+
+**目标方法执行完成**
+
+
+
+将所有的数据都放在ModelAndViewContainer，包含要去的页面地址。还包含Model数据
+
+
+
+![image-20210216044138506](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216044138506.png)
+
+
+
+**执行完这句话后，使用适配器执行目标方法就结束了**
+
+```java
+mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+```
+
+
+
+![image-20210216044600388](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216044600388.png)
+
+
+
+---
+
+
+
+
+
+**处理派发结果：**
+
+```java
+this.processDispatchResult(processedRequest, response, mappedHandler, mv, (Exception)dispatchException);
+```
+
+
+
+```java
+public void render(@Nullable Map<String, ?> model, HttpServletRequest request, HttpServletResponse response) throws Exception {
+    if (this.logger.isDebugEnabled()) {
+        this.logger.debug("View " + this.formatViewName() + ", model " + (model != null ? model : Collections.emptyMap()) + (this.staticAttributes.isEmpty() ? "" : ", static attributes " + this.staticAttributes));
+    }
+
+    Map<String, Object> mergedModel = this.createMergedOutputModel(model, request, response);
+    this.prepareResponse(request, response);
+    //再将得到的hashmap传入  渲染合并输出的模型    这里拿到请求对象↓
+    this.renderMergedOutputModel(mergedModel, this.getRequestToExpose(request), response);
+    //调用了：InternalResourceView#renderMergedOutputModel
+}
+```
+
+
+
+
+
+返回一个HashMap，来表示model中的数据
+
+![image-20210216050002082](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216050002082.png)
+
+
+
+
+
+**视图解析功能**
+
+```java
+//InternalResourceView#renderMergedOutputModel
+protected void renderMergedOutputModel(Map<String, Object> model, HttpServletRequest request, HttpServletResponse response) throws Exception {
+    
+    //---------------------------------------------------------------------------
+    //将model作为Request域的属性
+    this.exposeModelAsRequestAttributes(model, request);
+    //---------------------------------------------------------------------------
+
+    
+    this.exposeHelpers(request);
+    String dispatcherPath = this.prepareForRendering(request, response);
+    RequestDispatcher rd = this.getRequestDispatcher(request, dispatcherPath);
+    if (rd == null) {
+        throw new ServletException("Could not get RequestDispatcher for [" + this.getUrl() + "]: Check that the corresponding file exists within your web application archive!");
+    } else {
+        if (this.useInclude(request, response)) {
+            response.setContentType(this.getContentType());
+            if (this.logger.isDebugEnabled()) {
+                this.logger.debug("Including [" + this.getUrl() + "]");
+            }
+
+            rd.include(request, response);
+        } else {
+            if (this.logger.isDebugEnabled()) {
+                this.logger.debug("Forwarding to [" + this.getUrl() + "]");
+            }
+
+            rd.forward(request, response);
+        }
+
+    }
+}
+```
+
+
+
+```java
+//AbstractView.exposeModelAsRequestAttributes
+protected void exposeModelAsRequestAttributes(Map<String, Object> model, HttpServletRequest request) throws Exception {
+    //-------------------------------------------------------------------
+    //遍历model中的所有数据，都加入Request域的属性中
+    model.forEach((name, value) -> {
+        if (value != null) {
+            request.setAttribute(name, value);
+        } else {
+            request.removeAttribute(name);
+        }
+
+    });
+}
+```
+
+
+
+> **进行渲染：并且这一步是在跳转之前将数据都放入请求域**
 
 
 
@@ -2795,10 +3528,80 @@ public Map boss(@MatrixVariable(value = "age", pathVar = "bossId")   Integer bos
 
 
 
+#### 流程：
 
 
 
+得到的mv：
 
+![image-20210216044055752](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216044055752.png)
+
+```java
+//DispatcherServlet.doDispatch()
+mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+
+//↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+    
+//AbstractHandlerMethodAdapter.handle()
+public final ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+    return this.handleInternal(request, response, (HandlerMethod)handler);
+}
+
+
+//↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+
+//RequestMappingHandlerAdapter.handleInternal()
+//这里就转换成mav对象了
+mav = this.invokeHandlerMethod(request, response, handlerMethod);
+
+
+//↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+
+//RequestMappingHandlerAdapter.invokeHandlerMethod
+//
+ invocableMethod.invokeAndHandle(webRequest, mavContainer, new Object[0]);
+
+if (!asyncManager.isConcurrentHandlingStarted()) {
+    //获得mav对象
+    ModelAndView var15 = this.getModelAndView(mavContainer, modelFactory, webRequest);
+    return var15;
+}
+
+//先执行：ServletInvocableHandlerMethod.invokeAndHandle
+//来得到方法的参数及其对应的值
+Object returnValue = this.invokeForRequest(webRequest, mavContainer, providedArgs);
+
+//再获取ModelAndView
+//↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+
+//RequestMappingHandlerAdapter.getModelAndView
+private ModelAndView getModelAndView(ModelAndViewContainer mavContainer, ModelFactory modelFactory, NativeWebRequest webRequest) throws Exception {
+    modelFactory.updateModel(webRequest, mavContainer);
+    if (mavContainer.isRequestHandled()) {
+        return null;
+    } else {
+        ModelMap model = mavContainer.getModel();
+        //将mavContainer封装成ModelAndView
+        ModelAndView mav = new ModelAndView(mavContainer.getViewName(), model, mavContainer.getStatus());
+        if (!mavContainer.isViewReference()) {
+            mav.setView((View)mavContainer.getView());
+        }
+
+        if (model instanceof RedirectAttributes) {
+            Map<String, ?> flashAttributes = ((RedirectAttributes)model).getFlashAttributes();
+            HttpServletRequest request = (HttpServletRequest)webRequest.getNativeRequest(HttpServletRequest.class);
+            if (request != null) {
+                RequestContextUtils.getOutputFlashMap(request).putAll(flashAttributes);
+            }
+        }
+
+        return mav;
+    }
+}
+```
 
 
 
