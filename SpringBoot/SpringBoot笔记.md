@@ -1,15 +1,3 @@
- 
-
-
-
-
-
-
-
-
-
-
-
 
 
 ![image-20210211025342522](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210211025342522.png)
@@ -698,8 +686,9 @@ spring-boo-starter-*,   *代表某种场景
 
 
 - **各种配置拥有默认值**
-  - ![image-20210211172648608](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210211172648608.png)
-
+  
+- ![image-20210211172648608](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210211172648608.png)
+  
 - - 默认配置最终都是**映射到某个类上**，如：MultipartProperties---并且也在容器中
   - 配置文件的值最终会**绑定该类上**，这个类会**在容器中创建对象**
 
@@ -2971,6 +2960,50 @@ public void handleReturnValue(@Nullable Object returnValue, MethodParameter retu
 
 
 
+```java
+/**
+ *     姓名： <input name="userName"/> <br/>
+ *     年龄： <input name="age"/> <br/>
+ *     生日： <input name="birth"/> <br/>
+ *     宠物姓名：<input name="pet.name"/><br/>
+ *     宠物年龄：<input name="pet.age"/>
+ */
+@Data
+public class Person {
+    
+    private String userName;
+    private Integer age;
+    private Date birth;
+    private Pet pet;
+    
+}
+
+@Data
+public class Pet {
+
+    private String name;
+    private String age;
+
+}
+```
+
+
+
+
+
+```java
+//数据绑定：页面提交的请求数据（GET / POST）都可以和对象属性进行绑定
+@PostMapping("/saveuser")
+public Person saveuser(Person person){
+    return person;
+}
+```
+
+
+
+当前方法只有一个参数Person
+
+![image-20210216180012166](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216180012166.png)
 
 
 
@@ -2978,6 +3011,7 @@ public void handleReturnValue(@Nullable Object returnValue, MethodParameter retu
 
 
 
+### POJO封装过程
 
 
 
@@ -2985,7 +3019,370 @@ public void handleReturnValue(@Nullable Object returnValue, MethodParameter retu
 
 
 
+自定义参数类型使用：`ServletModelAttributeMethodProsessor`来解析
 
+![image-20210216182417750](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216182417750.png)
+
+
+
+
+
+![image-20210216185326639](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216185326639.png)
+
+
+
+
+
+
+
+```java
+//ModelAttributeMethodProcessor.supportsParameter()
+public boolean supportsParameter(MethodParameter parameter) {
+    return parameter.hasParameterAnnotation(ModelAttribute.class) || 
+        //非简单属性，返回true
+        this.annotationNotRequired && !BeanUtils.isSimpleProperty(parameter.getParameterType());
+}
+
+//BeanUtils
+public static boolean isSimpleProperty(Class<?> type) {
+    Assert.notNull(type, "'type' must not be null");
+    //是不是简单类型？  返回false
+    return isSimpleValueType(type) || type.isArray() && isSimpleValueType(type.getComponentType());
+}
+
+public static boolean isSimpleValueType(Class<?> type) {
+    return Void.class != type && Void.TYPE != type && (ClassUtils.isPrimitiveOrWrapper(type) || Enum.class.isAssignableFrom(type) || CharSequence.class.isAssignableFrom(type) || Number.class.isAssignableFrom(type) || Date.class.isAssignableFrom(type) || Temporal.class.isAssignableFrom(type) || URI.class == type || URL.class == type || Locale.class == type || Class.class == type);
+}
+```
+
+不是简单类型，`ModelAttributeMethodProcessor解析器`支持这个自定义参数类型
+
+
+
+
+
+----
+
+
+
+得到了resolver，接下来解析参数：
+
+
+
+```java
+args[i] = this.resolvers.resolveArgument(parameter, mavContainer, request, this.dataBinderFactory);
+```
+
+↓
+
+```java
+public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer, NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+    HandlerMethodArgumentResolver resolver = this.getArgumentResolver(parameter);
+    if (resolver == null) {
+        throw new IllegalArgumentException("Unsupported parameter type [" + parameter.getParameterType().getName() + "]. supportsParameter should be called first.");
+    } else {
+        return resolver.resolveArgument(parameter, mavContainer, webRequest, binderFactory);
+    }
+}
+```
+
+
+
+```java
+//org.springframework.web.method.annotation.ModelAttributeMethodProcessor#resolveArgument
+```
+
+![image-20210216210431780](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216210431780.png)
+
+如果在mavContainer中有这个对象？就直接拿出来
+
+
+
+创建一个实例：**空Person对象**
+
+![image-20210216210746145](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216210746145.png)
+
+
+
+
+
+```java
+//ModelAttributeMethodProcessor.resolveArgument()
+if (bindingResult == null) {
+    //将请求中的数据封装到空的Person实例中
+    WebDataBinder binder = binderFactory.createBinder(webRequest, attribute, name);
+    if (binder.getTarget() != null) {
+        if (!mavContainer.isBindingDisabled(name)) {
+            //将请求中断的数据绑定进来
+            this.bindRequestParameters(binder, webRequest);
+        }
+
+        this.validateIfApplicable(binder, parameter);
+        if (binder.getBindingResult().hasErrors() && this.isBindExceptionRequired(binder, parameter)) {
+            throw new BindException(binder.getBindingResult());
+        }
+    }
+
+    if (!parameter.getParameterType().isInstance(attribute)) {
+        attribute = binder.convertIfNecessary(binder.getTarget(), parameter.getParameterType(), parameter);
+    }
+
+    bindingResult = binder.getBindingResult();
+}
+
+Map<String, Object> bindingResultModel = bindingResult.getModel();
+mavContainer.removeAttributes(bindingResultModel);
+mavContainer.addAllAttributes(bindingResultModel);
+return attribute;
+```
+
+
+
+`WebDataBinder`：web数据绑定器，将请求参数的值绑定到**指定的JavaBean里面--->attribute--->空的Person对象**
+
+![image-20210216211245829](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216211245829.png)
+
+
+
+转换服务：
+
+其中有124个Converters
+
+![image-20210216213841545](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216213841545.png)
+
+http，文本传输，使用转换器将string转换为integer等其他类型
+
+
+
+![image-20210216214003873](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216214003873.png)
+
+
+
+> `WebDataBinder`利用它里面的Converters将请求数据转成指定的数据类型。再次封装到JavaBean中。
+
+
+
+```java
+//ServletModelAttributeMethodProcessor
+protected void bindRequestParameters(WebDataBinder binder, NativeWebRequest request) {
+    ServletRequest servletRequest = (ServletRequest)request.getNativeRequest(ServletRequest.class);
+    Assert.state(servletRequest != null, "No ServletRequest");
+    ServletRequestDataBinder servletBinder = (ServletRequestDataBinder)binder;
+    //传入原生Request进行绑定
+    servletBinder.bind(servletRequest);
+}
+
+//ServletRequestDataBinder
+public void bind(ServletRequest request) {
+    //获得所有kv对   拿到了请求传过来的所有参数
+    MutablePropertyValues mpvs = new ServletRequestParameterPropertyValues(request);
+    MultipartRequest multipartRequest = (MultipartRequest)WebUtils.getNativeRequest(request, MultipartRequest.class);
+    if (multipartRequest != null) {
+        this.bindMultipart(multipartRequest.getMultiFileMap(), mpvs);
+    } else if (StringUtils.startsWithIgnoreCase(request.getContentType(), "multipart/")) {
+        HttpServletRequest httpServletRequest = (HttpServletRequest)WebUtils.getNativeRequest(request, HttpServletRequest.class);
+        if (httpServletRequest != null) {
+            StandardServletPartUtils.bindParts(httpServletRequest, mpvs, this.isBindEmptyMultipartFiles());
+        }
+    }
+
+    this.addBindValues(mpvs, request);
+    this.doBind(mpvs);
+}
+```
+
+
+
+mpvs中每个参数都被封装为PropertyValue
+
+![image-20210216221034296](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216221034296.png)
+
+
+
+
+
+进行转换，得到转换器getConverter()  ----->  for循环遍历所有的Converters，来匹配类型
+
+![image-20210216223211685](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216223211685.png)
+
+
+
+根据源类型和目标类型来寻找converter
+
+`GenericConversionService`在设置每一个值的时候，找它里面的所有converter，哪个可以将这个数据类型（Request带来参数的字符串）转换到指定类型（javaBean---Integer）
+
+![image-20210216223542950](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216223542950.png)
+
+
+
+set每个kv
+
+![image-20210216231116986](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216231116986.png)
+
+
+
+
+
+`bindRequestParameters()`这一步就结束了
+
+
+
+得到的attribute，即Person对象中，已经得到了所有的数据
+
+  
+
+> **DataBinder负责将请求数据绑定到JavaBean上**
+
+
+
+
+
+
+
+-----
+
+
+
+也可以给WebDataBinder里面放**自己的Converter**；
+
+`private static final class StringToNumber<T extends Number> implements Converter<String, T>`
+
+
+
+![image-20210216225252598](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216225252598.png)
+
+![image-20210216230731260](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210216230731260.png)
+
+
+
+
+
+### 自定义Converter原理
+
+
+
+ 
+
+WebDataBinder数据绑定器中，有 ConversionService，其中注册了一百多个Converters，能将String转换成各种类型
+
+
+
+将字符串以逗号分隔，作为pet属性的值封装进去
+
+```html
+宠物：<input name="pet" value="猫猫,3">
+```
+
+异常：   **Mismatch**    就是无法将String直接转为一个对象，**一定要指定为其属性赋值**
+
+![image-20210217025246917](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217025246917.png)
+
+
+
+
+
+自定义一个Converter：
+
+
+
+```java
+//WebMvcConfigurer
+/**
+ * Add {@link Converter Converters} and {@link Formatter Formatters} in addition to the ones
+ * registered by default.
+ */
+default void addFormatters(FormatterRegistry registry) {
+}
+```
+
+
+
+```java
+@Bean //WebMvcConfigurer
+public WebMvcConfigurer webMvcConfigurer(){
+    return new WebMvcConfigurer() {
+        @Override
+        public void configurePathMatch(PathMatchConfigurer configurer) {
+            UrlPathHelper urlPathHelper = new UrlPathHelper();
+            //设置为不移除分号后面的内容，矩阵变量功能就可以生效
+            urlPathHelper.setRemoveSemicolonContent(false);
+            configurer.setUrlPathHelper(urlPathHelper);
+        }
+
+        @Override
+        public void addFormatters(FormatterRegistry registry) {
+            registry.addConverter(new Converter<String, Pet>() {
+                @Override
+                public Pet convert(String s) {
+                    //以 , 分割
+                    if(!StringUtils.isEmpty(s)){
+                        Pet pet = new Pet();
+                        String[] split = s.split(",");
+                        pet.setName(split[0]);
+                        pet.setAge(Integer.parseInt(split[1]));
+                        return pet;
+                    }
+                    return null;
+                }
+            });
+        }
+    };
+}
+```
+
+
+
+
+
+---
+
+
+
+分析：
+
+使用`ModelAttributeMethodProcessor.resolveArgument()`解析参数：
+
+现在的converters中有了我们自定义的converter
+
+![image-20210217033259385](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217033259385.png)
+
+
+
+![image-20210217034046227](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217034046227.png)
+
+
+
+
+
+执行convert方法
+
+![image-20210217033748336](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217033748336.png)
+
+
+
+返回到调用convert方法的地方：
+
+![image-20210217033851955](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217033851955.png)
+
+
+
+得到了完成数据转换后的Pet对象，并将数据分装进去了
+
+![image-20210217034159013](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217034159013.png)
+
+
+
+再向上返回，args中得到的请求参数已经确定：**将Pet属性对象封装进了Person对象中**
+
+![image-20210217034600630](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217034600630.png)
+
+
+
+
+
+
+
+  
 
 
 
@@ -3077,7 +3474,7 @@ protected ModelAndView handleInternal{
 
 
 	1. 当前解析器是否支持解析当前参数
- 	2. 支持：调用resolveArgument
+	2. 支持：调用resolveArgument
 
 **`HandlerMethodArgumentResolver`是一个接口，各种类型的解析器都实现了这个接口并实现了`resolveArgument`这个方法，用来判断当前的参数解析器能否解析传入的这个`parameter`**
 
@@ -3264,7 +3661,17 @@ try {
 
 
 
-- 解析这个参数的值
+
+
+---
+
+
+
+- 解析这个参数的值------调用各自HandlerMethodArgumentResolver的resolveArgument方法即可
+
+
+
+**自定义类型参数  封装pojo，ServletModelAttributeMethodProcessor  这个参数处理器支持**
 
 
 
@@ -3604,6 +4011,1035 @@ private ModelAndView getModelAndView(ModelAndViewContainer mavContainer, ModelFa
 ```
 
 
+
+
+
+
+
+## 数据处理与内容协商
+
+
+
+数据处理：
+
+- 响应页面：go->视图解析与模板引擎  **多用于单体项目**
+- 相应数据   **前后端分离**
+
+
+
+### 响应JSON
+
+
+
+#### jackson.jar+ResponseBody
+
+
+
+引入依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+web场景自动引入了json场景
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-json</artifactId>
+      <version>2.3.4.RELEASE</version>
+      <scope>compile</scope>
+    </dependency>
+```
+
+![image-20210217174605589](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217174605589.png)
+
+
+
+
+
+给前端自动返回json数据
+
+
+
+```java
+if (this.argumentResolvers != null) {
+    invocableMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
+}
+if (this.returnValueHandlers != null) {
+   invocableMethod.setHandlerMethodReturnValueHandlers(this.returnValueHandlers);
+}
+//参数解析器和返回值解析器都在invocableMethod中
+```
+
+##### 返回值解析器
+
+![image-20210217175545217](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217175545217.png)
+
+
+
+
+
+```java
+public void invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer,
+      Object... providedArgs) throws Exception {
+	//这一步中执行了doInvoke，执行完了目标方法  并得到了返回值，即方法中生成的Person对象
+   Object returnValue = invokeForRequest(webRequest, mavContainer, providedArgs);
+```
+
+![image-20210217180138821](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217180138821.png)
+
+
+
+
+
+![image-20210217180340069](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217180340069.png)
+
+
+
+```java
+try {
+   this.returnValueHandlers.handleReturnValue(
+         returnValue, getReturnValueType(returnValue), mavContainer, webRequest);
+}
+```
+
+**利用所有的返回值处理器来处理返回值**
+
+
+
+```java
+//HandlerMethodReturnValueHandlerComposite
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
+    //返回值对象+返回值类型    先寻找哪一个返回值处理器handler能处理
+    HandlerMethodReturnValueHandler handler = this.selectHandler(returnValue, returnType);
+    if (handler == null) {
+        throw new IllegalArgumentException("Unknown return value type: " + returnType.getParameterType().getName());
+    } else {
+        handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);
+    }
+}
+
+
+@Nullable
+private HandlerMethodReturnValueHandler selectHandler(@Nullable Object value, MethodParameter returnType) {
+    //是不是异步的处理器
+    boolean isAsyncValue = this.isAsyncReturnValue(value, returnType);
+    Iterator var4 = this.returnValueHandlers.iterator();
+
+    HandlerMethodReturnValueHandler handler;
+    do {
+        do {
+            if (!var4.hasNext()) {
+                return null;
+            }
+
+            handler = (HandlerMethodReturnValueHandler)var4.next();
+        } while(isAsyncValue && !(handler instanceof AsyncHandlerMethodReturnValueHandler));
+    } while(!handler.supportsReturnType(returnType));
+
+    return handler;
+}
+```
+
+
+
+
+
+> 返回值处理器：先判断是否支持这种类型返回值 `supportsReturnType()`，再调用返回值处理器 `handleReturnValue`
+>
+> ```java
+> public interface HandlerMethodReturnValueHandler {
+>     boolean supportsReturnType(MethodParameter var1);
+> 
+>     void handleReturnValue(@Nullable Object var1, MethodParameter var2, ModelAndViewContainer var3, NativeWebRequest var4) throws Exception;
+> }
+> ```
+
+
+
+```java
+//RequestResponseBodyMethodProcessor
+@Override
+public boolean supportsReturnType(MethodParameter returnType) {
+    //@ResponseBody注解
+   return (AnnotatedElementUtils.hasAnnotation(returnType.getContainingClass(), ResponseBody.class) ||
+         returnType.hasMethodAnnotation(ResponseBody.class));
+}
+```
+
+
+
+
+
+
+
+-----
+
+
+
+##### 返回值解析器原理
+
+
+
+```java
+//HandlerMethodReturnValueHandlerComposite
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
+    HandlerMethodReturnValueHandler handler = this.selectHandler(returnValue, returnType);
+    if (handler == null) {
+        throw new IllegalArgumentException("Unknown return value type: " + returnType.getParameterType().getName());
+    } else {
+        //接下来处理返回值
+        handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);
+    }
+}
+```
+
+
+
+使用 `RequestResponseBodyMethodProcessor`来处理返回值(标了@ResponseBody的)
+
+**MessageConverters 在 `RequestResponseBodyMethodProcessor`中进行调用，所以前提是使用 @ResponseBody注解**
+
+```java
+//RequestResponseBodyMethodProcessor
+@Override
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
+      ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
+      throws IOException, HttpMediaTypeNotAcceptableException, HttpMessageNotWritableException {
+
+   mavContainer.setRequestHandled(true);
+   ServletServerHttpRequest inputMessage = createInputMessage(webRequest);
+   ServletServerHttpResponse outputMessage = createOutputMessage(webRequest);
+
+   // Try even with null return value. ResponseBodyAdvice could get involved.
+   // 使用消息转换器进行写出操作
+   writeWithMessageConverters(returnValue, returnType, inputMessage, outputMessage);
+}
+```
+
+> `AbstractMessageConverterMethodProcessor`类
+
+
+
+利用 `MessageConverters`进行处理，将数据写为json
+
+- 内容协商。浏览器会以请求头的方式告诉服务器他能接收什么样的内容类型
+- 服务器最终根据自己自身的能力，决定服务器能生产出什么样的内容类型的数据
+- springmvc会挨个遍历所有容器底层的`HttpMessageConverter`，看谁能处理
+  - 得到`MappingJackson2HttpMessageConverter`可以将对象写为json
+  - 利用`MappingJackson2HttpMessageConverter`将对象转为json再写出去
+
+![image-20210217211904243](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217211904243.png)
+
+
+
+
+
+
+
+
+
+
+
+能接收的类型：
+
+![image-20210217212344963](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217212344963.png)
+
+
+
+服务器能生产的类型：
+
+![image-20210217212715628](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217212715628.png)
+
+
+
+两端的类型开始匹配
+
+```java
+List<MediaType> mediaTypesToUse = new ArrayList<>();
+//共28次循环，在mediaTypesToUse中放入到底能写出什么类型的数据
+for (MediaType requestedType : acceptableTypes) {
+   for (MediaType producibleType : producibleTypes) {
+      if (requestedType.isCompatibleWith(producibleType)) {
+         mediaTypesToUse.add(getMostSpecificMediaType(requestedType, producibleType));
+      }
+   }
+}
+```
+
+
+
+因为浏览器直接能接收：`*/*`
+
+![image-20210217213022308](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217213022308.png)
+
+
+
+
+
+#### HTTPMessageConverter原理
+
+
+
+
+
+**`HttpMessageConverter`：看是否支持将此Class类型的对象转为MediaType类型的数据**
+
+（例：支不支持将Person对象转为JSON,或者JSON转为Person）
+
+![image-20210217213644699](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217213644699.png)
+
+
+
+
+
+
+
+遍历所有messageConverters  （**默认的MessageConverter**）
+
+![image-20210217213334132](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217213334132.png)
+
+
+
+```java
+public boolean canWrite(Class<?> clazz, @Nullable MediaType mediaType) {
+   return supports(clazz/*返回值类型valueType*/) && canWrite(mediaType);
+}
+```
+
+
+
+0. 只支持Byte类型的返回值
+
+1. 只支持String类型
+
+2. 同1
+
+3. Resource类型
+
+4. ResourceRegion
+
+5. DOMSource.class \  SAXSource.class   \  StAXSource.class  \  StreamSource.class  \  Source.class
+
+6. MultiValueMap
+
+7. ![image-20210217225128506](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217225128506.png)
+
+   `MappingJackson2HttpMessageConverter`
+
+8. 同7
+
+
+
+![image-20210217225603781](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217225603781.png)
+
+
+
+判断成功：接下来使用write方法写为json格式：
+
+```java
+genericConverter.write(body, targetType, selectedMediaType, outputMessage);
+```
+
+
+
+`AbstractGenericHttpMessageConverter#write`
+
+![image-20210217230134323](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217230134323.png)
+
+
+
+
+
+![image-20210217230407278](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217230407278.png)
+
+
+
+最终：`MappingJackson2HttpMessageConverter`把对象转为json放到response中 
+
+**利用底层的jackson的objectMapper转换的**
+
+![image-20210217230708585](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210217230708585.png)
+
+
+
+
+
+
+
+
+
+
+
+#### springmvc支持哪些返回值类型
+
+`supportsReturnType()`
+
+```java
+ModelAndView
+Model
+View
+ResponseEntity
+ResponseBodyEmitter
+StreamingResponseBody
+HttpEntity
+HttpHeaders
+Callable 异步？
+DeferredResult
+ListenableFuture
+CompletionStage
+WebAsyncTask
+方法标注@ModelAttribute注解
+方法标注@ResponseBody注解   ---->   RequestResponseBodyMethodProcessor
+```
+
+
+
+
+
+### 内容协商
+
+
+
+**根据客户端*接收能力*  不同，返回不同媒体类型的数据**
+
+
+
+#### 引入xml依赖
+
+
+
+ 
+
+```xml
+<dependency>
+    <groupId>com.fasterxml.jackson.dataformat</groupId>
+    <artifactId>jackson-dataformat-xml</artifactId>
+</dependency>
+```
+
+
+
+#### postman分别测试返回json和xml
+
+
+
+这时浏览器返回的内容类型是：比`*/*`优先接收
+
+![image-20210218160931692](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218160931692.png)
+
+而postman返回的是json形式
+
+修改accept
+
+![image-20210218161523099](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218161523099.png)
+
+
+
+只需要改变请求头中Accept字段，Http协议中规定的，告诉服务器本客户端可以接收的数据类型
+
+
+
+
+
+
+
+#### 开启浏览器参数方式内容协商功能
+
+
+
+对于浏览器：没有application/json，只能使用 `*/*`来匹配application/json
+
+**按照权重优先匹配原则，优先匹配application/xml**
+
+![image-20210218190449456](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218190449456.png)
+
+
+
+**权重！！json的低，虽然能匹配到**
+
+![image-20210218190610105](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218190610105.png)
+
+找到第一个最佳匹配：xml
+
+![image-20210218190658891](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218190658891.png)
+
+
+
+
+
+
+
+------
+
+
+
+
+
+为了方便内容协商，开启基于请求参数的内容协商功能。
+
+**开启基于请求参数的内容协商功能**：
+
+```yaml
+spring:
+  web:
+    resources:
+      add-mappings: true
+```
+
+**带上format字段**
+
+`http://localhost:8080/test/person?format=xml`
+
+`http://localhost:8080/test/person?format=json`
+
+
+
+![image-20210218212604351](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218212604351.png)
+
+
+
+
+
+开启功能后，多了一个基于参数的内容协商策略
+
+其中也规定了参数，即支持的key：只能写json/xml
+
+![image-20210218213251828](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218213251828.png)
+
+
+
+
+
+确定客户端接收什么样的内容类型；
+
+
+
+```java
+//ContentNegotiationManager
+@Override
+public List<MediaType> resolveMediaTypes(NativeWebRequest request) throws HttpMediaTypeNotAcceptableException {
+   for (ContentNegotiationStrategy strategy : this.strategies) {
+      List<MediaType> mediaTypes = strategy.resolveMediaTypes(request);
+      if (mediaTypes.equals(MEDIA_TYPE_ALL_LIST)) {
+         continue;
+      }
+      return mediaTypes;
+   }
+   return MEDIA_TYPE_ALL_LIST;
+}
+```
+
+↓
+
+```java
+//AbstractMappingContentNegotiationStrategy	
+//key:json
+public List<MediaType> resolveMediaTypeKey(NativeWebRequest webRequest, @Nullable String key)
+      throws HttpMediaTypeNotAcceptableException {
+
+   if (StringUtils.hasText(key)) {
+      MediaType mediaType = lookupMediaType(key);
+      if (mediaType != null) {
+         handleMatch(key, mediaType);
+         return Collections.singletonList(mediaType);
+      }
+      mediaType = handleNoMatch(webRequest, key);
+      if (mediaType != null) {
+         addMapping(key, mediaType);
+         return Collections.singletonList(mediaType);
+      }
+   }
+    //如果找不到format参数对应的value，就默认使用*/*，并继续进行下一个strategy的尝试
+    //-------(开启了基于请求参数的内容协商功能但没有提供有有效的format参数时)-------
+   return MEDIA_TYPE_ALL_LIST;
+}
+```
+
+
+
+1. Parameter策略优先确定是要返回json数据（**获取请求头中的format的值**）
+
+   ​	![image-20210218214310567](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218214310567.png)
+
+
+
+只要解析出了不是 `*/*`的媒体类型，就直接返回。
+
+![image-20210218214535784](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218214535784.png)
+
+
+
+**parameter优先！**
+
+2. 
+
+
+
+
+
+
+
+#### 内容协商原理
+
+
+
+先简单debug走一下，得到返回值：
+
+![image-20210218162054938](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218162054938.png)
+
+
+
+处理返回值：
+
+在 `RequestResponseBodyMethodProcessor`中：
+
+![image-20210218162224457](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218162224457.png)
+
+
+
+1. 判断当前响应头中是否已经有确定的媒体类型：MediaType
+
+   `MediaType contentType = outputMessage.getHeaders().getContentType();`
+
+2. 获取客户端(PostMan、浏览器)支持接收的内容类型  ---->  **获取客户端Accept请求头字段**: application/xml
+
+   - `contentNegotiationManager` **内容协商管理器**   默认使用基于请求头的策略来获取Accept字段  
+
+     ![image-20210218211749960](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218211749960.png)
+
+   - `HeaderContentNegotiationStrategy`确定客户端可以接收的内容类型
+
+   ![image-20210218211957226](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218211957226.png)
+
+   
+
+   
+
+   `List<MediaType> acceptableTypes = getAcceptableMediaTypes(request);`
+
+
+
+​		返回得到acceptableTypes 的值![image-20210218162953297](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218162953297.png)
+
+![image-20210218163210682](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218163210682.png)
+
+
+
+
+
+
+
+3. 遍历循环所有的当前西永的MessageConverter，看谁支持操作这个对象--->Person
+
+4. 找到支持操作Person的Converter，把Converter支持的媒体类型mediatype统计出来 `converter.getSupportedMediaTypes()`
+
+   `List<MediaType> producibleTypes = getProducibleMediaTypes(request, valueType, targetType);`
+
+
+
+​		拿到所有的messageConverters:
+
+​		![image-20210218163945596](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218163945596.png)
+
+
+
+所有前面的Converter都不支持转换Person对象，
+
+```java
+protected List<MediaType> getProducibleMediaTypes(
+      HttpServletRequest request, Class<?> valueClass, @Nullable Type targetType) {
+
+   Set<MediaType> mediaTypes =
+         (Set<MediaType>) request.getAttribute(HandlerMapping.PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE);
+   if (!CollectionUtils.isEmpty(mediaTypes)) {
+      return new ArrayList<>(mediaTypes);
+   }
+   else if (!this.allSupportedMediaTypes.isEmpty()) {
+      List<MediaType> result = new ArrayList<>();
+       //遍历所有MessageConverters
+      for (HttpMessageConverter<?> converter : this.messageConverters) {
+         if (converter instanceof GenericHttpMessageConverter && targetType != null) {
+            if (((GenericHttpMessageConverter<?>) converter).canWrite(targetType, valueClass, null)) {
+                //将当前这个converter支持的媒体类型放入列表中
+               result.addAll(converter.getSupportedMediaTypes());
+            }
+         }
+         else if (converter.canWrite(valueClass, null)) {
+            result.addAll(converter.getSupportedMediaTypes());
+         }
+      }
+      return result;
+   }
+   else {
+      return Collections.singletonList(MediaType.ALL);
+   }
+}
+```
+
+
+
+![image-20210218165646074](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218165646074.png)
+
+
+
+![image-20210218171347895](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218171347895.png)
+
+
+
+
+
+![image-20210218171556982](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218171556982.png)
+
+
+
+```java
+public MappingJackson2XmlHttpMessageConverter(ObjectMapper objectMapper) {
+   super(objectMapper, new MediaType("application", "xml", StandardCharsets.UTF_8),
+         new MediaType("text", "xml", StandardCharsets.UTF_8),
+         new MediaType("application", "*+xml", StandardCharsets.UTF_8));
+   Assert.isInstanceOf(XmlMapper.class, objectMapper, "XmlMapper required");
+}
+```
+
+最终的结果：
+
+![image-20210218173114734](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218173114734.png)
+
+
+
+**当前系统对于当次请求，支持返回json以及xml的数据**
+
+
+
+5. **客户端需要**[application/xml]，**服务端能力**[result ↑ 可以将Person对象转换输出10种类型的数据]，是底层两个converters的结果
+
+
+
+
+
+6. 进行内容协商的最佳匹配媒体类型
+
+   ![image-20210218174218872](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218174218872.png)
+
+
+
+```java
+//AbstractMessageConverterMethodProcessor.writeWithMessageConverters()
+for (MediaType requestedType : acceptableTypes) {//能接收的
+   for (MediaType producibleType : producibleTypes) {//服务器产生的
+      if (requestedType.isCompatibleWith(producibleType)) {
+         mediaTypesToUse.add(getMostSpecificMediaType(requestedType, producibleType));
+      }
+   }
+}
+```
+
+最终得到的可以使用的
+
+![image-20210218181659066](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218181659066.png)
+
+
+
+
+
+
+
+7. 用支持 **将对象转为最佳匹配媒体类型** 的Converter，并调用他进行转换
+
+再次遍历所有Converters
+
+![image-20210218182923322](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218182923322.png)
+
+
+
+
+
+来到write()方法(`AbstractGenericHttpMessageConverter`)
+
+执行底层转换：
+
+![image-20210218185925255](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218185925255.png)
+
+
+
+
+
+
+
+
+
+#### 自定义MessageConverter
+
+
+
+实现多协议数据兼容。
+
+
+
+1. `@ResponseBody` 相应数据出去  调用`RequestResponseBodyMethodProcessor`
+2. `Processor` 处理方法返回值。通过`MessageConverter`处理
+
+3. 所有的MessageConverter合起来可以支持**各种媒体类型数据的操作**（读and写）
+4. 内容协商找到最终的 `MessageConverter`
+
+
+
+`WebMvcAutoConfiguration.configureMessageConverters()`创建Converter对象
+
+ 
+
+![image-20210218231000527](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218231000527.png)
+
+
+
+导入了jackson处理xml的包，xml的Converter就会自动进来
+
+```java
+WebMvcConfigurationSupport
+jackson2XmlPresent = ClassUtils.isPresent("com.fasterxml.jackson.dataformat.xml.XmlMapper", classLoader);
+```
+
+
+
+----
+
+
+
+要配置SpringMVC的任何功能，一个入口  给容器中添加一个WebMvcConfigurer
+
+
+
+```java
+/**
+ * 自定义的Converter
+ */
+public class ARuiMessageConverter implements HttpMessageConverter<Person> {
+
+    @Override
+    public boolean canRead(Class<?> clazz, MediaType mediaType) {
+        return false;
+    }
+
+    @Override
+    public boolean canWrite(Class<?> clazz, MediaType mediaType) {
+        return clazz.isAssignableFrom(Person.class);
+    }
+
+    /**
+     * 服务器要统计所有messageConverter都能写出哪些内容类型
+     * application/x-arui
+     * @return
+     */
+    @Override
+    public List<MediaType> getSupportedMediaTypes() {
+        //将字符串解析成媒体类型集合
+        //Invalid mime type "x-arui": does not contain '/'  一定要写完整名字
+        return MediaType.parseMediaTypes("application/x-arui");
+    }
+
+    @Override
+    public Person read(Class<? extends Person> clazz, HttpInputMessage inputMessage) throws IOException, HttpMessageNotReadableException {
+        return null;
+    }
+
+    @Override
+    public void write(Person person, MediaType contentType, HttpOutputMessage outputMessage) throws IOException, HttpMessageNotWritableException {
+        //自定义协议数据的写出
+        String data = person.getUserName() + ";" + person.getAge() + ";" + person.getBirth();
+
+        //写出去
+        OutputStream body = outputMessage.getBody();
+        body.write(data.getBytes());
+    }
+}
+```
+
+
+
+> HttpMessageConverter.canRead():
+>
+> getPerson(@RequestBody Person person)
+>
+> 传过来的是xml/json/自定义类型，将传过来的值  **读为**  要接收的类型---Person
+
+**配置文件：向converters中添加自定义Converter类**
+
+```java
+@Bean //WebMvcConfigurer
+public WebMvcConfigurer webMvcConfigurer(){
+    return new WebMvcConfigurer() {
+        @Override
+        //不是修改---->额外功能的添加
+        public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+            converters.add(new ARuiMessageConverter());
+        }
+    }
+}
+```
+
+
+
+```java
+/**
+ * 1.浏览器发请求，直接返回xml      [application/xml]  jackson-xml-converter
+ * 2.如果是ajax请求  返回json      [application/json] jackson-json-converter
+ * 3.如果用app发请求，返回自定义协议数据 [application/x-arui]   xxxconverter
+ *         格式 :属性值1;属性值2;
+ * -----------------------------------------------------------------------------
+ * 1.添加自定义的MessageConverter进系统底层
+ * 2.系统底层就会统计出所有MessageConverter能操作哪些类型
+ * 3.客户端内容协商[arui--->arui]
+ * @return
+ */
+@GetMapping("/test/person")
+@ResponseBody  //利用返回值处理器里面的消息转换器进行处理
+public Person getPerson(){
+    Person person = new Person();
+    person.setAge(21);
+    SimpleDateFormat sd = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    sd.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+    person.setBirth(sd.format(new Date()));
+    person.setUserName("dahuang");
+    return person;
+}
+```
+
+
+
+客户端能接收的：application/x-arui
+
+![image-20210219001535924](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219001535924.png)
+
+
+
+自定义的Converter：
+
+![image-20210218234524388](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210218234524388.png)
+
+
+
+得到服务器可以产生的媒体类型：application/x-ari
+
+![image-20210219001840947](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219001840947.png)
+
+
+
+随后进行最佳匹配,并从所有Converters中寻找可以处理application/x-ari类型的
+
+
+
+
+
+
+
+
+
+#### 浏览器与Postman内容协商完全适配
+
+
+
+内容协商管理器：    **参数形式的策略strategy**：只支持两种参数
+
+![image-20210219035810759](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219035810759.png)
+
+
+
+自定义内容协商策略(自定义内容协商管理器)
+
+
+
+```java
+//构造---map
+public ParameterContentNegotiationStrategy(Map<String, MediaType> mediaTypes) {
+   super(mediaTypes);
+}
+```
+
+
+
+```java
+@Bean //WebMvcConfigurer
+public WebMvcConfigurer webMvcConfigurer(){
+    return new WebMvcConfigurer() {
+        /**
+         * 自定义内容协商策略
+         * @param configurer
+         */
+        @Override
+        public void configureContentNegotiation(ContentNegotiationConfigurer configurer) {
+            Map<String, MediaType> mediaTypes = new HashMap<>();
+            //指定支持解析哪些参数对应的哪些媒体类型
+            mediaTypes.put("json", MediaType.APPLICATION_JSON);
+            mediaTypes.put("xml", MediaType.APPLICATION_XML);
+            mediaTypes.put("x-arui", MediaType.parseMediaType("application/x-arui"));
+            //Map<String, MediaType> mediaTypes
+            ParameterContentNegotiationStrategy parameterStrategy = new ParameterContentNegotiationStrategy(mediaTypes);
+            configurer.strategies(Arrays.asList(parameterStrategy));
+        }
+
+        @Override
+        //不是修改----额外功能的添加
+        public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+            converters.add(new ARuiMessageConverter());
+        }
+    }
+}
+```
+
+
+
+自定义的类型已经加入到mediaTypes中
+
+![image-20210219041532386](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219041532386.png)
+
+
+
+> **但 `HeaderContentNegotiationStrategy`就没有加入到内容协商管理器中**，**不会接收发送请求中的Accept参数**,  这样如果不设定format参数，发送的请求 得到的网页端可接收的类型就是 `*/*`，会直接匹配所有类型 ，  即： 服务器可产生的类型中的第一个 `application/json`
+
+
+
+**也向`HeaderContentNegotiationStrategy`内容协商管理器中加入`HeaderContentNegotiationStrategy`**
+
+```java
+HeaderContentNegotiationStrategy headerContentNegotiationStrategy = new HeaderContentNegotiationStrategy();
+configurer.strategies(Arrays.asList(parameterStrategy, headerContentNegotiationStrategy));
+```
+
+
+
+> 还可以自定义，实现ContentNegotiationStrategy接口
+
+
+
+
+
+-----
+
+
+
+```java
+/**
+ * 自定义的Converter
+ */
+public class ARuiMessageConverter implements HttpMessageConverter<Person> {
+
+    @Override
+    public boolean canRead(Class<?> clazz, MediaType mediaType) {
+        return false;
+    }
+
+    @Override
+    public boolean canWrite(Class<?> clazz, MediaType mediaType) {
+        /**
+         * 这里应该完善，同时判断class和 mediaType
+         * return supports(clazz) && canWrite(mediaType);
+         * 将其修改为不只对Person类起作用，对所有的类都起作用，像Jackson2HttpMessageConverter一样
+         * 不过这样write方法有点难实现 .... 每个类的属性个数、名称都不同
+         */
+        return clazz.isAssignableFrom(Person.class);
+    }
+```
 
 
 
