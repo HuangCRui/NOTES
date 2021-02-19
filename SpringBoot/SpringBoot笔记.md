@@ -4975,6 +4975,7 @@ public WebMvcConfigurer webMvcConfigurer(){
             mediaTypes.put("x-arui", MediaType.parseMediaType("application/x-arui"));
             //Map<String, MediaType> mediaTypes
             ParameterContentNegotiationStrategy parameterStrategy = new ParameterContentNegotiationStrategy(mediaTypes);
+            //通过 parameterStrategy.setParameterName()来修改参数format的名称
             configurer.strategies(Arrays.asList(parameterStrategy));
         }
 
@@ -5042,6 +5043,854 @@ public class ARuiMessageConverter implements HttpMessageConverter<Person> {
 ```
 
 
+
+-------
+
+
+
+> 有可能添加的自定义的功能，会覆盖默认很多功能，导致一些默认的功能失效
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 视图解析与模板引擎
+
+
+
+视图解析：**SpringBoot默认不支持 JSP，需要引入第三方模板引擎技术实现页面渲染。**
+
+
+
+ 
+
+
+
+
+
+
+
+### 视图解析原理
+
+
+
+1. 在dispatcherservlet中，通过获得handler，即`requestmappinghandlermapping`
+
+![image-20210220040948176](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220040948176.png)
+
+
+
+得到请求`/index`映射的方法`index()`
+
+![image-20210220041028175](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220041028175.png)
+
+
+
+
+
+2. 找到适配器 `RequestMappingHandlerAdapter`
+
+   `HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());`   
+
+
+
+
+
+3. 执行handle方法
+
+   `mv = ha.handle(processedRequest, response, mappedHandler.getHandler());`
+
+
+
+​		`mav = invokeHandlerMethod(request, response, handlerMethod);`
+
+
+
+
+
+4. 在 `invokeForRequest`方法中解析完参数后， 执行映射请求的方法  invoke
+
+   ```java
+   public void invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer,
+         Object... providedArgs) throws Exception {
+   
+      Object returnValue = invokeForRequest(webRequest, mavContainer, providedArgs);
+   ```
+
+   ```java
+   public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer, Object... providedArgs) throws Exception {
+       Object[] args = this.getMethodArgumentValues(request, mavContainer, providedArgs);
+   ```
+
+   ![image-20210220042309805](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220042309805.png)
+
+
+
+5. 方法返回 **重定向**
+
+   `return "redirect:/index.html";//return "index" -> 默认是转发  每次刷新都重新提交表单`
+
+
+
+​		`invokeForRequest`方法执行完成，**解析参数并执行目标方法最后获得返回值**
+
+​		`Object returnValue = invokeForRequest(webRequest, mavContainer, providedArgs);`
+
+​		返回值：
+
+![image-20210220043025682](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220043025682.png)
+
+
+
+
+
+6. 解析返回值
+
+   ```java
+   this.returnValueHandlers.handleReturnValue(
+         returnValue, getReturnValueType(returnValue), mavContainer, webRequest);
+   ```
+
+> 之前解析`@Response`时，使用 `RequestResponseBodyMethodProcessor`，使用里面的 `MessageConverter`进行数据类型转换
+>
+> ​	![image-20210220043329109](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220043329109.png)
+
+
+
+这里循环查找判断使用哪个handler
+
+![image-20210220043751088](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220043751088.png)
+
+↓
+
+这里返回的是"redirect:/index.html"  所以是String类型，
+
+![image-20210220044059132](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220044059132.png)
+
+
+
+> 没有使用@ResponseBody来给页面返回数据
+
+
+
+7. 使用`ViewNameMethodReturnValueHandler`
+
+   ```java
+   @Override
+   public boolean supportsReturnType(MethodParameter returnType) {
+      Class<?> paramType = returnType.getParameterType();
+       //返回为空  ||  字符串
+      return (void.class == paramType || CharSequence.class.isAssignableFrom(paramType));
+   }
+   ```
+
+
+
+-----
+
+
+
+
+
+8. **目标方法处理的过程中，所有数据都会被放在`ModelAndViewContainer` 里面，包括数据和视图地址**
+
+   `handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);`
+
+   ```java
+   public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
+         ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
+   
+      if (returnValue instanceof CharSequence) {
+         String viewName = returnValue.toString();
+          //放到ModelAndViewContainer容器中
+         mavContainer.setViewName(viewName);
+          //视图名称是否是重定向操作
+         if (isRedirectViewName(viewName)) {
+             //开启转发行为
+            mavContainer.setRedirectModelScenario(true);
+         }
+          /* viewName以redirect:开头?
+          	protected boolean isRedirectViewName(String viewName) {	
+   		return (PatternMatchUtils.simpleMatch(this.redirectPatterns, viewName) || viewName.startsWith("redirect:"));
+   	}
+          */
+      }
+      else if (returnValue != null) {
+         // should not happen
+         throw new UnsupportedOperationException("Unexpected return type: " +
+               returnType.getParameterType().getName() + " in method: " + returnType.getMethod());
+      }
+   }
+   ```
+
+
+
+
+
+9. `invocableMethod.invokeAndHandle(webRequest, mavContainer);`执行完成
+
+   接下来得到ModelAndView对象并返回
+
+    `return getModelAndView(mavContainer, modelFactory, webRequest);`
+
+
+
+> ​	只要方法的参数是个**自定义类型对象-->从请求参数中确定的**(User)，这个对象也会被放到model中，作为defaultmodel放在MacContainer中
+
+![image-20210220045614840](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220045614840.png)
+
+
+
+```java
+private ModelAndView getModelAndView(ModelAndViewContainer mavContainer,
+      ModelFactory modelFactory, NativeWebRequest webRequest) throws Exception {
+
+   modelFactory.updateModel(webRequest, mavContainer);
+   if (mavContainer.isRequestHandled()) {
+      return null;
+   }
+    //获取model，和参数中的model是一个对象
+   ModelMap model = mavContainer.getModel();
+    //将mavContainer中的试图名称和model都放入ModelAndView对象中
+   ModelAndView mav = new ModelAndView(mavContainer.getViewName(), model, mavContainer.getStatus());
+   if (!mavContainer.isViewReference()) {
+      mav.setView((View) mavContainer.getView());
+   }
+    //重定向携带数据  也可以写入参数中，其实就是个Model
+    //public interface RedirectAttributes extends Model
+   if (model instanceof RedirectAttributes) {
+      Map<String, ?> flashAttributes = ((RedirectAttributes) model).getFlashAttributes();
+      HttpServletRequest request = webRequest.getNativeRequest(HttpServletRequest.class);
+      if (request != null) {
+         RequestContextUtils.getOutputFlashMap(request).putAll(flashAttributes);
+      }
+   }
+   return mav;
+}
+```
+
+
+
+![image-20210220050308295](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220050308295.png)
+
+
+
+
+
+10. 将 `getModelAndView` 获得的mav对象 :如上图:arrow_up:    返回到 `handleInternal`方法中的调用 ：
+
+    `mav = invokeHandlerMethod(request, response, handlerMethod);`
+
+
+
+至此：`mv = ha.handle(processedRequest, response, mappedHandler.getHandler());`执行结束，并得到了当前请求的`ModelAndView`对象
+
+![image-20210220052829485](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220052829485.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### 模板引擎-Thymeleaf
+
+
+
+**现代化、服务端Java模板引擎**
+
+
+
+
+
+
+
+#### 基本语法
+
+
+
+
+
+**表达式：**
+
+| 表达式名字 | 语法   | 用途                               |
+| ---------- | ------ | ---------------------------------- |
+| 变量取值   | ${...} | 获取请求域、session域、对象等值    |
+| 选择变量   | *{...} | 获取上下文对象值                   |
+| 消息       | #{...} | 获取国际化等值                     |
+| 链接       | @{...} | 生成链接                           |
+| 片段表达式 | ~{...} | jsp:include 作用，引入公共页面片段 |
+
+
+
+
+
+---
+
+
+
+字面量：
+
+文本值: **'one text'** **,** **'Another one!'** **,…**数字: **0** **,** **34** **,** **3.0** **,** **12.3** **,…**布尔值: **true** **,** **false**
+
+空值: **null**
+
+变量： one，two，.... 变量不能有空格
+
+
+
+----
+
+
+
+文本操作
+
+
+
+字符串拼接: **+**
+
+变量替换: **|The name is ${name}|** 
+
+
+
+
+
+-----
+
+
+
+条件运算:
+
+If-then: **(if) ? (then)**
+
+If-then-else: **(if) ? (then) : (else)**
+
+Default: (value) **?: (defaultvalue)**
+
+
+
+----
+
+
+
+
+
+特殊操作
+
+
+
+无操作： _
+
+
+
+
+
+#### 设置属性值-th:attr
+
+
+
+设置单个值
+
+```html
+<form action="subscribe.html" th:attr="action=@{/subscribe}">
+  <fieldset>
+    <input type="text" name="email" />
+    <input type="submit" value="Subscribe!" th:attr="value=#{subscribe.submit}"/>
+  </fieldset>
+</form>
+```
+
+
+
+设置多个值
+
+`<img src="../../images/xxx.png"  th:attr="src=@{/images/xxx.png},title=#{logo},alt=#{logo}" />`
+
+
+
+
+
+以上两个的代替写法 th:xxx
+
+`<input type="submit" value="Subscribe!" th:value="#{subscribe.submit}"/> <form action="subscribe.html" th:action="@{/subscribe}">`
+
+
+
+
+
+#### 迭代
+
+
+
+```html
+<tr th:each="prod : ${prods}">
+        <td th:text="${prod.name}">Onions</td>
+        <td th:text="${prod.price}">2.41</td>
+        <td th:text="${prod.inStock}? #{true} : #{false}">yes</td>
+</tr>
+
+
+<tr th:each="prod,iterStat : ${prods}" th:class="${iterStat.odd}? 'odd'">
+  <td th:text="${prod.name}">Onions</td>
+  <td th:text="${prod.price}">2.41</td>
+  <td th:text="${prod.inStock}? #{true} : #{false}">yes</td>
+</tr>
+```
+
+
+
+
+
+
+
+#### 条件运算
+
+
+
+```html
+<a href="comments.html"
+th:href="@{/product/comments(prodId=${prod.id})}"
+th:if="${not #lists.isEmpty(prod.comments)}">view</a>
+
+<div th:switch="${user.role}">
+  <p th:case="'admin'">User is an administrator</p>
+  <p th:case="#{roles.manager}">User is a manager</p>
+  <p th:case="*">User is some other thing</p>
+</div>
+```
+
+
+
+
+
+#### 属性优先级
+
+
+
+![image.png](../picture/SpringBoot%E7%AC%94%E8%AE%B0/1605498132699-4fae6085-a207-456c-89fa-e571ff1663da.png)
+
+
+
+
+
+### thymeleaf的使用
+
+
+
+导入starter依赖
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-thymeleaf</artifactId>
+</dependency>
+```
+
+
+
+自动配置好了thymeleaf
+
+
+
+```java
+@Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(ThymeleafProperties.class)
+@ConditionalOnClass({ TemplateMode.class, SpringTemplateEngine.class })
+@AutoConfigureAfter({ WebMvcAutoConfiguration.class, WebFluxAutoConfiguration.class })
+public class ThymeleafAutoConfiguration { }
+```
+
+
+
+
+
+自动配好的策略
+
+- 1、所有thymeleaf的**配置值**都在 `ThymeleafProperties`
+- 2、配置好了 **SpringTemplateEngine** 
+- 3、配好了 **ThymeleafViewResolver** 
+- 4、只需要直接开发页面
+
+
+
+
+
+```java
+//ThymeleafProperties
+@ConfigurationProperties(prefix = "spring.thymeleaf")
+public class ThymeleafProperties {
+
+   private static final Charset DEFAULT_ENCODING = StandardCharsets.UTF_8;
+
+   public static final String DEFAULT_PREFIX = "classpath:/templates/";//放到templates目录中
+
+   public static final String DEFAULT_SUFFIX = ".html";
+```
+
+
+
+```java
+@GetMapping("/thytest")
+public String thyTest(Model model){
+    //model中的数据会被放在请求域中，request.setAttribute()
+    model.addAttribute("msg", "你好 thymeleaf");
+    model.addAttribute("link", "http://www.baidu.com");
+    return "success";
+}
+```
+
+
+
+```html
+<!DOCTYPE html>
+<!--名称空间-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<h1 th:text="${msg}">哈哈 </h1>
+<h2>
+    <a href="www.github.com" th:href="${link}">百度</a><br>
+    <a href="www.github.com" th:href="@{link}">百度2</a><br>
+</h2>
+</body>
+</html>
+```
+
+**如果没有经过模板引擎的渲染，就是默认值href。经过模板引擎后，就是取出的动态值th:href**
+
+
+
+> ${link}       取出Request域中存的link值作为地址 ，超链接到目标地址
+>
+> @{link}      以link为地址，而不是以Request域中存的link值作为地址   `http://localhost:8080/world/link`
+>
+> ​		href中加上"/"，动态配置项目名称，这样项目中的资源可以自动配置根路径
+
+
+
+```yaml
+server:
+  servlet:
+    context-path: /world #项目工程的路径，所有请求都要加/world/
+```
+
+
+
+
+
+
+
+### 构建后台管理系统
+
+
+
+
+
+ 
+
+```java
+@Slf4j
+@Controller
+public class IndexController {
+
+    /**
+     * 来登录页
+     * 无法直接进入后台管理页面  在templates中无法直接访问
+     * @return
+     */
+    @GetMapping(value = {"/", "/login"})
+    public String loginPage(){
+        return "login";
+    }
+
+
+    @PostMapping("/login")
+    //表单以post方式提交到到 /login
+    public String index(User user, HttpSession session, Model model){
+        if(StringUtils.hasLength(user.getUserName()) && StringUtils.hasLength(user.getPassword())){
+            //把登陆成功的用户保存起来
+            session.setAttribute("loginUser", user);
+            log.info("登陆成功: " + user.getUserName());
+            //登陆成功  重定向到index.html ；防止刷新时 表单重复提交
+            return "redirect:/index.html";//return "index" -> 默认是转发  每次刷新都重新提交表单
+        }else{
+            model.addAttribute("msg", "账号密码错误");
+            log.info("账号密码错误");
+            //回到登录页面
+            return "login";
+        }
+
+    }
+
+    /**
+     * 经过请求处理，通过模板引擎解析，无法直接访问templates中的资源
+     * 将index.html作为请求
+     * 在index.html页面不断刷新，只是刷新的是/index.html这个访问请求
+     * 通过模板引擎跳转到真正的index.html页面
+     * @return
+     */
+    @GetMapping("/index.html")
+    public String indexPage(HttpSession session, Model model){
+        //判断是否登录   拦截器  过滤器 统一配置
+        Object loginUser = session.getAttribute("loginUser");
+        if(loginUser != null){
+            return "index";
+        }
+        model.addAttribute("msg", "请重新登陆");
+        return "login";
+    }
+}
+```
+
+
+
+
+
+
+
+```java
+@Controller
+public class TableController {
+
+    @GetMapping("/basic_table")
+    public String basic_table(){
+        return "table/basic_table";
+    }
+
+    @GetMapping("/dynamic_table")
+    public String dynamic_table(Model model){
+
+        //表格的内容是动态遍历的
+        //添加数据到model(request域)中
+        List<User> users = Arrays.asList(new User("zhangsan", "123456"),
+                new User("lisi", "123123"),
+                new User("aaa", "123321"),
+                new User("bbb", "123111"));
+        model.addAttribute("users",users);
+        return "table/dynamic_table";
+    }
+
+    @GetMapping("/responsive_table")
+    public String responsive_table(){
+        return "table/responsive_table";
+    }
+
+    @GetMapping("/editable_table")
+    public String editable_table(){
+        return "table/editable_table";
+    }
+}
+```
+
+
+
+
+
+
+
+添加错误信息提示：从请求域中获取登录时放入的错误信息：
+
+![image-20210219174648025](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219174648025.png)
+
+![image-20210219174657623](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219174657623.png)
+
+
+
+
+
+
+
+修改header显示的用户名称：
+
+![image-20210219175408953](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219175408953.png)
+
+![image-20210219175424003](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219175424003.png)
+
+
+
+
+
+
+
+#### 抽取公共页面
+
+
+
+整个管理系统：左侧和上面都是一样的，中间的区域内容不同
+
+![image-20210219192235683](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219192235683.png)
+
+
+
+![image-20210219192330078](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219192330078.png)
+
+
+
+
+
+
+
+![image-20210219194204948](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219194204948.png)
+
+
+
+地址使用thmeleaf，**可以动态加上项目名**
+
+
+
+引入：
+
+![image-20210219201051659](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219201051659.png)
+
+
+
+公共页面common.html
+
+![image-20210219212509356](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219212509356.png)
+
+
+
+![image-20210219212532545](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219212532545.png)
+
+
+
+
+
+```html
+<!-- Placed js at the end of the document so the pages load faster -->
+<div th:replace="common :: #commonscript"></div>
+```
+
+
+
+引入几个公共部分：
+
+![image-20210219212224347](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219212224347.png)
+
+
+
+
+
+
+
+----
+
+
+
+
+
+完成提取后，要修改左侧菜单的值，只需要在公共页面修改就行
+
+
+
+![image-20210219213536520](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219213536520.png)
+
+
+
+
+
+
+
+退出log out:跳转到登录页面
+
+![image-20210219222308623](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219222308623.png)
+
+
+
+修改header用户名
+
+![image-20210219222334699](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219222334699.png)
+
+```
+[[${session.loginUser.userName}]]
+```
+
+
+
+
+
+#### 遍历数据
+
+
+
+向model中传入数据
+
+```java
+@GetMapping("/dynamic_table")
+public String dynamic_table(Model model){
+
+    //表格的内容是动态遍历的
+    List<User> users = Arrays.asList(new User("zhangsan", "123456"),
+            new User("lisi", "123123"),
+            new User("aaa", "123321"),
+            new User("bbb", "123111"));
+    model.addAttribute("users",users);
+    return "table/dynamic_table";
+}
+```
+
+
+
+![image-20210219230339161](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219230339161.png)
+
+
+
+![image-20210219230325796](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210219230325796.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### tip
+
+
+
+将需要使用模板引擎解析的html文件都加上
+
+`lang="en" xmlns:th="http://www.thymeleaf.org"`命名空间
+
+
+
+---
+
+
+
+```html
+th:href="@{/css/style.css}"
+```
+
+一定记得 th 的链接形式写成@{}
 
 
 
