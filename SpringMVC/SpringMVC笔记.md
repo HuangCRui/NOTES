@@ -1550,7 +1550,7 @@ public String save20(@CookieValue(value = "JSESSIONID") String jsid) throws IOEx
 
 - 表单的**提交方式**是`post`
 
-- 表单的enctype属性是**多部分表单**形式，及`enctype=“multipart/form-data”`
+- **表单的enctype属性是多部分表单形式，及`enctype=“multipart/form-data”`**
 
 
 
@@ -1580,6 +1580,8 @@ url编码：键值对形势
 
 字符串切割？
 
+------
+
 步骤：
 
 导入fileupload和io坐标
@@ -1605,7 +1607,7 @@ url编码：键值对形势
 public void save21(String username,  MultipartFile upload) throws IOException {
     System.out.println(username);
     System.out.println(upload);
-    //MultipartFile[field="upload", filename=背包入门.pdf, contentType=application/pdf, size=142702]
+    //MultipartFile[field="upload", filename=xxx.pdf, contentType=application/pdf, size=142702]
 }
 ```
 
@@ -1623,7 +1625,7 @@ public void save21(String username,  MultipartFile upload) throws IOException {
 public void save21(String username,  MultipartFile upload) throws IOException {
     System.out.println(username);
     System.out.println(upload);
-    //MultipartFile[field="upload", filename=背包入门.pdf, contentType=application/pdf, size=142702]
+    //MultipartFile[field="upload", filename=xxx.pdf, contentType=application/pdf, size=142702]
     //获得上传文件的名称
     String originalFilename = upload.getOriginalFilename();
     //将文件保存
@@ -1884,24 +1886,6 @@ public class MyInterceptor1 implements HandlerInterceptor {
 
 
 ## 用户登录权限控制分析
-
-
-
-用户没有登录的情况下，不能对后台菜单进行访问操作，点击菜单跳转到登录页面，**只有用户登录成功后才能进行后台功能的操作**
-
-需求图：
-
-
-
-![image-20210204211709238](../picture/SpringMVC%E7%AC%94%E8%AE%B0/image-20210204211709238.png)
-
-
-
-`prehandle()`判断用户是否登录？session中有没有user对象
-
-
-
-
 
 
 

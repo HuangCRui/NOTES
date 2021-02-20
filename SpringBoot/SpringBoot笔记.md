@@ -2261,7 +2261,7 @@ public class WebConfig {
 
 
 
-所有对springmvc功能分析，都从`DispatcherServlet` -> `doDispatch()`方法开始
+**所有对springmvc功能分析，都从`DispatcherServlet` -> `doDispatch()`方法开始**
 
 
 
@@ -5082,6 +5082,10 @@ public class ARuiMessageConverter implements HttpMessageConverter<Person> {
 
 
 
+#### redirect:/index.html 处理过程
+
+
+
 1. 在dispatcherservlet中，通过获得handler，即`requestmappinghandlermapping`
 
 ![image-20210220040948176](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220040948176.png)
@@ -5297,6 +5301,86 @@ private ModelAndView getModelAndView(ModelAndViewContainer mavContainer,
 
 
 
+------
+
+11. ​	**处理派发结果---页面该如何响应**
+
+     `processDispatchResult(processedRequest, response, mappedHandler, mv, dispatchException);`
+
+    -  进行页面渲染逻辑 `render(mv, request, response);`
+
+      - 根据方法的String返回值（viewname），得到`View`对象 --> [**定义了页面的渲染逻辑**]
+
+        `view = resolveViewName(viewName, mv.getModelInternal(), locale, request);`
+
+        - 所有的视图解析器尝试是否能根据当前返回值，得到view对象
+
+          ![image-20210220150428135](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220150428135.png)
+
+          
+
+          Thymeleaf视图解析器 new了一个 `RedirectView`并返回
+
+          `ContentNegotiatingViewResolver`里面包含了下面所有的视图解析器，在内部还是利用下面的所有视图解析器得到视图对象
+
+​							![image-20210220154432325](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220154432325.png)
+
+> 在`DispatcherServlet#resolveViewName`中，遍历所有的`ViewResolvers`，首先遍历到`ContentNegotiatingViewResolver`，在这里获得 `List<View> candidateViews = getCandidateViews(viewName, locale, requestedMediaTypes);`，并且在 `getCandidateViews` 这一方法中，再次遍历`ContentNegotiatingViewResolver`中所有的ViewResolvers ，其中`ThymeleafViewResolver` new了一个RedirectView并返回
+>
+> 都不需要`ContentNegotiatingViewResolver`后面的几个视图解析器来工作
+>
+> ![image-20210220153106909](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220153106909.png)
+
+
+
+​					根据返回值（viewname）得到了一个`RedirectView`，返回一个view
+
+![image-20210220150804811](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220150804811.png)
+
+
+
+
+
+---
+
+
+
+​			视图对象调用render方法进行页面渲染	`view.render(mv.getModelInternal(), request, response);`
+
+​		![image-20210220155106873](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220155106873.png)
+
+
+
+​		`renderMergedOutputModel(mergedModel, getRequestToExpose(request), response);`
+
+
+
+- 获取目标url地址
+
+  ```java
+  protected void renderMergedOutputModel(Map<String, Object> model, HttpServletRequest request,
+  			HttpServletResponse response) throws IOException {
+  
+      String targetUrl = createTargetUrl(model, request);// -->  /index.html
+      targetUrl = updateTargetUrl(targetUrl, model, request, response);
+  
+      // Save flash attributes
+      RequestContextUtils.saveOutputFlashMap(targetUrl, request, response);
+  
+      // Redirect   重定向
+      sendRedirect(request, response, targetUrl, this.http10Compatible);
+  }
+  //↓调用servlet中原始方法---->重定向！
+  response.sendRedirect(encodedURL);
+  ```
+
+- `response.sendRedirect(encodedURL);`
+
+
+
+> RedirectView如何渲染？？   **就是重定向到指定页面**   
+
+请求结束:+1:
 
 
 
@@ -5304,8 +5388,72 @@ private ModelAndView getModelAndView(ModelAndViewContainer mavContainer,
 
 
 
+----
 
 
+
+
+
+#### /dynamic_table 请求
+
+
+
+
+
+向model中添加数据
+
+![image-20210220165628591](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220165628591.png)
+
+
+
+- 判断是否使用Thymeleaf视图解析器：
+
+  - 返回值（视图名称）以redirect: 前缀开始的  ---  `new RedirectView`    它的底层render是重定向逻辑
+
+  - 返回值以forward: 前缀开始的   --- `new InternalResourceView `   它的底层是  `request.getRequestDispatcher(path)`  `forword(request,response)` **转发**过去
+
+  - `ThymeleafViewResolver#loadView`
+
+    创建一个视图对象`ThymeleafView`
+
+    ```java
+    view = (AbstractThymeleafView) beanFactory.configureBean(viewInstance, viewName);
+    ```
+
+    **如果返回值不是上面两个方法----返回值是普通字符串：new ThymeleafView**
+
+![image-20210220171805566](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220171805566.png)
+
+
+
+- 执行 `ThymeleafView`的render()方法
+
+```java
+public void render(final Map<String, ?> model, final HttpServletRequest request, final HttpServletResponse response)
+        throws Exception {
+    renderFragment(this.markupSelectors, model, request, response);
+}
+```
+
+
+
+拿到需要给页面渲染的数据  model：
+
+![image-20210220172242015](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220172242015.png)
+
+
+
+经过各种处理后：
+
+```java
+viewTemplateEngine.process(templateName, processMarkupSelectors, context, templateWriter);
+```
+
+
+
+
+
+**自定义视图解析器+自定义视图 ( render() )**
 
 
 
@@ -5891,6 +6039,644 @@ th:href="@{/css/style.css}"
 ```
 
 一定记得 th 的链接形式写成@{}
+
+
+
+
+
+
+
+
+
+## 拦截器
+
+
+
+### 完善用户管理系统的访问权限
+
+
+
+
+
+
+
+**访问每个页面都需要登录！！**
+
+
+
+`HandlerInterceptor`
+
+![image-20210220182741979](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220182741979.png)
+
+
+
+![image-20210220183508663](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220183508663.png)
+
+
+
+
+
+
+
+
+
+```java
+/**
+ * Add Spring MVC lifecycle interceptors for pre- and post-processing of
+ * controller method invocations and resource handler requests.
+ * Interceptors can be registered to apply to all requests or be limited
+ * to a subset of URL patterns.
+ */
+default void addInterceptors(InterceptorRegistry registry) {
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+但此时登录页的所有样式都出问题了！.....
+
+![image-20210220184956813](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220184956813.png)
+
+
+
+> **拦截器不止拦截了动态请求，也拦截了所有静态资源的访问**   只显示html页面的基础文字内容
+
+![image-20210220190046420](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220190046420.png)
+
+
+
+改进：放行静态资源文件夹中的资源
+
+```java
+@Configuration
+public class AdminWebConfig implements WebMvcConfigurer {
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new LoginIntercepter())
+                .addPathPatterns("/**")//拦截所有请求  包括静态资源
+                .excludePathPatterns("/", "/login", "/css/**", "/fonts/**", "/js/**", "/images/**");//这两个操作需要放行，都能访问到登录页面
+    }
+}
+```
+
+
+
+
+
+```java
+    /**
+     * 经过请求处理，通过模板引擎解析，无法直接访问templates中的资源
+     * 将index.html作为请求
+     * 在index.html页面不断刷新，只是刷新的是/index.html这个访问请求
+     * 通过模板引擎跳转到真正的index.html页面
+     * @return
+     */
+    @GetMapping("/index.html")
+    public String indexPage(HttpSession session, Model model){
+        //判断是否登录   拦截器  过滤器 统一配置
+//        Object loginUser = session.getAttribute("loginUser");
+//        if(loginUser != null){
+//            return "index";
+//        }
+//        model.addAttribute("msg", "请重新登陆");
+//        return "login";
+        //可以去掉登录检查了
+        return "index";
+    }
+```
+
+
+
+
+
+---
+
+
+
+此时因为是重定向，取不出放在session中的消息
+
+
+
+```java
+/**
+ * 登录检查
+ * 1.配置好拦截器要拦截哪些请求
+ * 2.把这些配置放在容器中
+ */
+@Slf4j
+public class LoginIntercepter implements HandlerInterceptor {
+
+    @Override
+    //目标方法执行之前
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+
+        log.info("拦截的请求：" + request.getRequestURI());
+        //登录检查逻辑
+        HttpSession session = request.getSession();
+        Object loginUser = session.getAttribute("loginUser");
+        if(loginUser != null){
+            return true;//放行
+        }
+        //跳转到登录页面   取不到消息
+        request.setAttribute("msg", "请先登录！");
+//        response.sendRedirect("/");
+        //转发：
+        request.getRequestDispatcher("/").forward(request, response);
+
+        return false;//拦截住  未登录
+    }
+
+    @Override
+    //目标方法执行完成以后
+    public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
+
+    }
+
+    @Override
+    //页面渲染之后
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+
+    }
+}
+```
+
+
+
+
+
+> 1. 编写一个拦截器，实现HandlerInterceptor接口
+> 2. 拦截器注册到容器中(实现`WebMvcConfigurer`的`addInterceptors`方法)
+> 3. 指定拦截规则【如果是拦截所有，静态资源也会被拦截】
+
+
+
+
+
+
+
+### 拦截器原理
+
+
+
+1. 根据当前请求，找到可以处理请求的handler，以及handler的所有拦截器
+
+自定义拦截器已经配置进了handler     **处理器执行链**
+
+![image-20210220213924471](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220213924471.png)
+
+
+
+
+
+2. 先来 **顺序执行**  所有拦截器的preHandle方法
+
+**目标方法执行之前：**
+
+执行拦截器的preHandle方法：如果返回false(即没通过拦截器)，就直接返回，请求处理结束。**并且不会执行目标方法**
+
+```java
+
+if (!mappedHandler.applyPreHandle(processedRequest, response)) {
+   return;
+}
+
+boolean applyPreHandle(HttpServletRequest request, HttpServletResponse response) throws Exception {
+    for (int i = 0; i < this.interceptorList.size(); i++) {
+        HandlerInterceptor interceptor = this.interceptorList.get(i);
+        //interceptor.preHandle
+        //只要任何一个拦截器执行失败，返回false
+        if (!interceptor.preHandle(request, response, this.handler)) {
+            triggerAfterCompletion(request, response, null);
+            return false;
+        }
+        //记录执行过的拦截器 
+        this.interceptorIndex = i;
+    }
+    return true;
+}
+
+void triggerAfterCompletion(HttpServletRequest request, HttpServletResponse response, @Nullable Exception ex) {
+    //已经执行过的拦截器
+    //倒序执行拦截器中的afterCompletion方法   -------  原理就在这
+    for (int i = this.interceptorIndex; i >= 0; i--) {
+        HandlerInterceptor interceptor = this.interceptorList.get(i);
+        try {
+            interceptor.afterCompletion(request, response, this.handler, ex);
+        }
+        catch (Throwable ex2) {
+            logger.error("HandlerInterceptor.afterCompletion threw exception", ex2);
+        }
+    }
+}
+```
+
+
+
+3. 如果任何一个拦截器执行失败返回false，直接跳出不执行目标方法
+
+4. 所有拦截器都返回True，执行目标方法
+
+5.  **倒序**执行所有拦截器的postHandle方法`mappedHandler.applyPostHandle(processedRequest, response, mv);`
+
+   ---
+
+   执行期间有**任何异常**，都会直接触发执行**拦截器的`aftercompletion`方法**：
+
+![image-20210220220005744](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220220005744.png)
+
+
+
+6. 页面 **成功渲染完成**后，也会倒序触发afterCompletion()
+
+```java
+//DispatcherServlet#processDispatchResult 渲染(render)完页面后:
+if (mappedHandler != null) {
+   // Exception (if any) is already handled..
+   mappedHandler.triggerAfterCompletion(request, response, null);
+}
+```
+
+
+
+
+
+![image-20210220220920110](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220220920110.png)
+
+> 永远都会触发**已经执行过**的拦截器的afterCompletion方法
+
+
+
+
+
+## 文件上传
+
+
+
+### 基本操作
+
+
+
+单文件和多文件上传
+
+```java
+<div class="form-group">
+    <label for="exampleInputFile">头像</label>
+    <input type="file" name="headerImg" id="exampleInputFile">
+</div>
+
+<div class="form-group">
+    <label for="exampleInputFile">照片</label>
+    <input type="file" name="photos" multiple>
+</div>
+```
+
+ `multiple`代表多文件上传
+
+
+
+```html
+<form role="form" th:action="@{/upload}" method="post" enctype="multipart/form-data">
+```
+
+
+
+```java
+/**
+ * MultipartFile 自动封装上传过来的文件
+ */
+@PostMapping("/upload")
+public String upload(@RequestParam("email") String email,
+                     @RequestParam("username") String username,
+                     @RequestPart("headerImg") MultipartFile headerImg,
+                     @RequestPart("photos") MultipartFile[] photos){
+    log.info("email:" + email);
+    log.info("username:" + username);
+    log.info("headerImg:" + headerImg.getOriginalFilename());
+    log.info("photosNum:" + photos.length);
+
+    return "index";
+}
+```
+
+
+
+![image-20210220232002686](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220232002686.png)
+
+
+
+
+
+----
+
+
+
+### 保存文件
+
+
+
+
+
+```java
+/**
+ * MultipartFile 自动封装上传过来的文件
+ */
+@PostMapping("/upload")
+public String upload(@RequestParam("email") String email,
+                     @RequestParam("username") String username,
+                     @RequestPart("headerImg") MultipartFile headerImg,
+                     @RequestPart("photos") MultipartFile[] photos) throws IOException {
+    log.info("email:" + email);
+    log.info("username:" + username);
+    log.info("headerImg:" + headerImg.getOriginalFilename());
+    log.info("photosNum:" + photos.length);
+
+    if(!headerImg.isEmpty()){
+        //保存到文件服务器，OSS服务器
+        headerImg.transferTo(new File("D:/desktop/" + headerImg.getOriginalFilename()));
+    }
+    if(photos.length != 0){
+        for(MultipartFile photo : photos){
+            if(!photo.isEmpty()){
+                photo.transferTo(new File("D:/desktop/" + photo.getOriginalFilename()));
+            }
+        }
+    }
+    return "index";
+}
+```
+
+
+
+
+
+### 改变文件上传大小限制
+
+
+
+
+
+![image-20210220232752040](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210220232752040.png)
+
+
+
+**需要标明单位：MB**
+
+```yaml
+spring:
+  servlet:
+    multipart:
+      max-file-size: 20MB  #单个文件最大
+      max-request-size: 40MB  # 所有文件总大小
+```
+
+:ok:
+
+
+
+
+
+
+
+
+
+### 文件上传参数解析器
+
+
+
+
+
+`MultipartAutoConfiguration`中自动配置了：`StandardServletMultipartResolver`【文件上传解析器】
+
+```java
+@Bean
+@ConditionalOnMissingBean({MultipartConfigElement.class, CommonsMultipartResolver.class})
+public MultipartConfigElement multipartConfigElement() {
+    return this.multipartProperties.createMultipartConfig();
+}
+
+@Bean(name = {"multipartResolver"})
+@ConditionalOnMissingBean({MultipartResolver.class})
+public StandardServletMultipartResolver multipartResolver() {
+```
+
+
+
+属性都在配置类： `MultipartProperties`中
+
+----
+
+
+
+1. 请求进来使用文件上传解析器判断并封装文件上传请求 `StandardServletMultipartResolver.isMultipart()`
+
+```java
+processedRequest = checkMultipart(request);
+```
+
+
+
+**请求的内容类型是`multipart/`开头**，
+
+![image-20210221035852972](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221035852972.png)
+
+
+
+解析这个请求，封装为：`StandardMultipartHttpServletRequest`类并返回
+
+```java
+return this.multipartResolver.resolveMultipart(request);
+```
+
+
+
+其中有request + 参数名称 + multipart文件
+
+![image-20210221040527419](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221040527419.png)
+
+
+
+
+
+```java
+//如果不等于request，就相当于在上面将request封装为了multipart类型的request，开启multipart
+multipartRequestParsed = (processedRequest != request);
+```
+
+![image-20210221041919778](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221041919778.png)
+
+
+
+2. 参数解析器来解析请求中的文件内容封装成`MultipartFile`
+
+   goto: `RequestMappingHandlerAdapter#invokeHandlerMethod`
+
+   使用哪个参数解析器呢?
+
+![image-20210221042134051](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221042134051.png)
+
+
+
+3. 使用所有的参数解析器来解析所有的参数
+
+   先获取参数及其值、类型，
+
+   `InvocableHandlerMethod#getMethodArgumentValues`
+
+![image-20210221043107013](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221043107013.png)
+
+
+
+```java
+if (!this.resolvers.supportsParameter(parameter))
+    
+public boolean supportsParameter(MethodParameter parameter) {
+    return this.getArgumentResolver(parameter) != null;
+}
+```
+
+​		使用所有的参数解析器来匹配这个参数 `supportsParameter()`
+
+先从缓存中查看是否判断过了：在判断 `if (!this.resolvers.supportsParameter(parameter))`时就已经将解析器添加进缓存
+
+执行`args[i] = this.resolvers.resolveArgument(parameter, mavContainer, request, this.dataBinderFactory);`时，直接从缓存中获取解析器
+
+![image-20210221043340604](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221043340604.png)
+
+
+
+判断条件：
+
+- 参数上使用注解 `@RequestPart("headerImg") MultipartFile headerImg,`
+
+```java
+//RequestPartMethodArgumentResolver
+public boolean supportsParameter(MethodParameter parameter) {
+   if (parameter.hasParameterAnnotation(RequestPart.class)) {
+      return true;
+   }
+   else {
+      if (parameter.hasParameterAnnotation(RequestParam.class)) {
+         return false;
+      }
+      return MultipartResolutionDelegate.isMultipartArgument(parameter.nestedIfOptional());
+   }
+}
+```
+
+- 判断是否是：   **在不标注@RequestPart的情况下**
+  - MultipartFile类？   
+  - MultipartFile集合？MultipartFileCollection
+  - MultipartFile数组？MultipartFileArray
+  - Part类？集合？数组？
+
+```java
+public static boolean isMultipartArgument(MethodParameter parameter) {
+    Class<?> paramType = parameter.getNestedParameterType();
+    return MultipartFile.class == paramType || isMultipartFileCollection(parameter) || isMultipartFileArray(parameter) || Part.class == paramType || isPartCollection(parameter) || isPartArray(parameter);
+}
+```
+
+
+
+![image-20210221044236465](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221044236465.png)
+
+
+
+
+
+
+
+---
+
+
+
+resolveArgument：
+
+![image-20210221044837655](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221044837655.png)
+
+
+
+解析参数：
+
+![image-20210221044943394](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221044943394.png)
+
+
+
+先拿到文件上传请求：
+
+![image-20210221045008246](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221045008246.png)
+
+
+
+是文件上传数组？(根据 name---photos)  将上传的文件都封装为MultipartFile  List    并将其转为数组[]类型
+
+![image-20210221045053151](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221045053151.png)
+
+
+
+
+
+3. **将request中文件信息封装为一个Map**，并通过getFiles()取出
+
+![image-20210221045222480](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221045222480.png)
+
+在解析文件上传请求的时候，就已经将他们都封装到Map中了
+
+![image-20210221050140914](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221050140914.png)
+
+
+
+
+
+4. 获得了所有参数的值args，并执行目标方法：
+
+   ![image-20210221050600481](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221050600481.png)
+
+```java
+@Nullable
+public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer, Object... providedArgs) throws Exception {
+    Object[] args = this.getMethodArgumentValues(request, mavContainer, providedArgs);
+    if (logger.isTraceEnabled()) {
+        logger.trace("Arguments: " + Arrays.toString(args));
+    }
+		//传递目标方法的参数值args，通过反射执行方法
+    return this.doInvoke(args);
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+----
+
+
+
+文件复制工具类 :star2:  来实现文件流的拷贝
+
+![image-20210221050826246](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221050826246.png)
+
+
+
+
+
+
 
 
 
