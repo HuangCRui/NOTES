@@ -6684,6 +6684,793 @@ public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewC
 
 
 
+## 异常处理
+
+
+
+
+
+### 错误处理
+
+
+
+#### 默认规则
+
+
+
+默认规则：
+
+- springboot提供`/error`处理所有错误的映射
+- 对于机器客户端，它将生成JSON响应，其中包含错误，HTTP状态和异常消息的详细信息。对于浏览器客户端，响应一个“whitelabel”错误视图，以HTML格式呈现相同的数据
+
+浏览器：
+
+![image-20210221154734575](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221154734575.png)
+
+postman（带上Cookie信息）
+
+![image-20210221155020489](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221155020489.png)
+
+![image-20210221155213313](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221155213313.png)
+
+
+
+如果将Accept修改为text/html，也是接受白页
+
+![image-20210221170957862](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221170957862.png)
+
+
+
+只是因为在浏览器中text/html的权重最大：所以先判断  执行返回白页
+
+![image-20210221171115244](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221171115244.png)
+
+
+
+
+
+
+
+- **对其进行自定义，添加View解析为error**
+
+
+
+- 要完全换默认行为，可以实现ErrorController，并注册该类型的Bean定义，或添加ErrorAttributes类型的组件以使用现有机制但替换其内容
+
+
+
+- 放在error下的4xx，5xx页面会被**自动解析**   出现对应
+
+![image-20210221155821825](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221155821825.png)
+
+
+
+打印错误信息：
+
+![image-20210221160742607](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221160742607.png)
+
+![image-20210221160716081](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221160716081.png)
+
+
+
+
+
+
+
+### 异常处理自动配置原理
+
+
+
+![image-20210221161803002](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221161803002.png)
+
+
+
+- `ErrorMvcAutoConfiguration`自动配置异常处理规则
+
+  - 1.容器中的组件：类型：`DefaultErrorAttributes`   id: `errorAttributes`
+
+    ​	`public class DefaultErrorAttributes implements ErrorAttributes, HandlerExceptionResolver, Ordered {`
+
+    **定义了响应的错误页面中包含哪些数据**
+
+  ```java
+  public Map<String, Object> getErrorAttributes(WebRequest webRequest, ErrorAttributeOptions options) {
+      Map<String, Object> errorAttributes = this.getErrorAttributes(webRequest, options.isIncluded(Include.STACK_TRACE));
+      if (Boolean.TRUE.equals(this.includeException)) {
+          options = options.including(new Include[]{Include.EXCEPTION});
+      }
+  
+      if (!options.isIncluded(Include.EXCEPTION)) {
+          errorAttributes.remove("exception");
+      }
+  
+      if (!options.isIncluded(Include.STACK_TRACE)) {
+          errorAttributes.remove("trace");
+      }
+  
+      if (!options.isIncluded(Include.MESSAGE) && errorAttributes.get("message") != null) {
+          errorAttributes.put("message", "");
+      }
+  
+      if (!options.isIncluded(Include.BINDING_ERRORS)) {
+          errorAttributes.remove("errors");
+      }
+  
+      return errorAttributes;
+  }
+  ```
+
+  ![image-20210221175927406](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221175927406.png)
+
+  
+
+  - 2.容器中的组件：类型：`BasicErrorController` id: `basicErrorController`
+
+    - ```java
+      @Controller
+      //(从配置文件中取出配置的error path)处理默认：/error路径的请求
+      @RequestMapping({"${server.error.path:${error.path:/error}}"})
+      public class BasicErrorController extends AbstractErrorController {
+      ```
+
+    - 1. 如果是**页面**  ，则响应：`new ModelAndView("error", model)`页面
+
+      ```java
+      @RequestMapping(
+          produces = {"text/html"}
+      )
+      public ModelAndView errorHtml(HttpServletRequest request, HttpServletResponse response) {
+          //....
+          return modelAndView != null ? modelAndView : new ModelAndView("error", model);
+      	//这里的error就是去寻找配置到容器中的id为error的View组件作为白页
+      ```
+
+    - 2. 以json数据响应出去  **错误信息键值对**
+
+      ```java
+      @RequestMapping
+      public ResponseEntity<Map<String, Object>> error(HttpServletRequest request) {
+      ```
+
+  - 3.容器中还会配置一个组件 View  id是error   (**响应默认错误页**)
+
+    ```java
+    @Conditional({ErrorMvcAutoConfiguration.ErrorTemplateMissingCondition.class})
+    protected static class WhitelabelErrorViewConfiguration {
+        private final ErrorMvcAutoConfiguration.StaticView defaultErrorView = new ErrorMvcAutoConfiguration.StaticView();
+        
+        @Bean(
+            name = {"error"}
+        )
+        @ConditionalOnMissingBean(//在容器中没有id为error的Bean时  ----- 可以自定义一个View放入容器！
+            name = {"error"}
+        )
+        public View defaultErrorView() {
+            return this.defaultErrorView;
+        }
+    ```
+
+  - 4.容器中放组件：`BeanNameViewResolver`   用来解析视图   
+
+    **请求发到/error路径 -----> `BasicErrorController` 跳转到“error”视图，`BeanNameViewResolver`   视图解析器按照返回的视图名error， 作为组件id，在容器中找到视图View对象**
+
+    ```java
+    @Bean
+    @ConditionalOnMissingBean
+    public BeanNameViewResolver beanNameViewResolver() {
+        BeanNameViewResolver resolver = new BeanNameViewResolver();
+        resolver.setOrder(2147483637);
+        return resolver;
+    }
+    ```
+
+![image-20210221165747062](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221165747062.png)
+
+
+
+如果想要返回页面，就会找error视图【`StaticView`】。（默认是一个白页  内含错误信息）
+
+
+
+
+
+- 5.容器中的组件 `DefaultErrorViewResolver`  id：`conventionErrorViewResolver`
+  - 如果发生错误，会以HTTP的状态码作为  视图页地址(viewName)  , 找到`error/`目录下的`viewName.html`
+  - ![image-20210221171949089](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221171949089.png)
+
+
+
+
+
+
+
+
+
+### 异常处理步骤流程
+
+
+
+1. 执行目标方法 `mv = ha.handle(processedRequest, response, mappedHandler.getHandler());`
+
+   - 执行成功，返回ModelAndView
+   - 目标方法运行期间有任何异常都会被**catch**；并且用 `dispatchException`进行封装
+
+2. 执行时出现异常：
+
+   doInvoke(): 
+
+   ![image-20210221192709933](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221192709933.png)
+
+   而且标志当前请求结束：
+
+   ```java
+   finally {
+      webRequest.requestCompleted();
+   }
+   ```
+
+   catch到异常：
+
+   ![image-20210221192857433](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221192857433.png)
+
+
+
+3. (即使前面执行目标方法出现异常，仍然会) **进入视图解析流程**   进行页面渲染
+
+   ```java
+   processDispatchResult(processedRequest, response, mappedHandler, mv, dispatchException);
+   //传入捕获的Exception，此时mv==null
+   ```
+
+
+
+```java
+//有异常？
+if (exception != null) {
+   if (exception instanceof ModelAndViewDefiningException) {
+      logger.debug("ModelAndViewDefiningException encountered", exception);
+      mv = ((ModelAndViewDefiningException) exception).getModelAndView();
+   }
+   else {
+       //拿到handler处理器   就是目标对应的Controller中的方法basic_table()
+      Object handler = (mappedHandler != null ? mappedHandler.getHandler() : null);
+       //处理handler中出现的异常
+      mv = processHandlerException(request, response, handler, exception);
+      errorView = (mv != null);
+   }
+}
+```
+
+![image-20210221193344863](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221193344863.png)
+
+
+
+
+
+4. 处理方法异常 ----  **来处理handler中发生的异常** `DispatcherServlet#processHandlerException`
+
+   处理完成返回一个ModelAndView：`mv = processHandlerException(request, response, handler, exception);`
+
+   - 遍历所有的 `handlerExceptionResolvers`，看谁能处理当前异常
+
+     `List<HandlerExceptionResolver> handlerExceptionResolvers`  **处理器异常解析器**
+
+     ![image-20210221205947355](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221205947355.png)
+
+     系统默认的异常解析器：
+
+     **DefaultErrorAttributes就是一个HandlerExceptionResolver**
+
+![image-20210221193824854](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221193824854.png)
+
+​			
+
+- `DefaultErrorAttributes`  先来处理异常。把异常信息保存到request域，并且返回null
+  - ![image-20210221210429947](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221210429947.png)
+
+- `HandlerExceptionResolverComposite`，再次遍历其中的三个异常解析器来尝试解析异常
+
+
+
+5. **遍历了当前默认的所有异常解析器，都无法解析这个异常，返回null...**，将这个异常**抛出去** throw ex
+
+   **只是为了保存错误信息，为了后面/error的处理**
+
+-----
+
+6. 上一次请求抛出异常并且没有任何解析器能处理，**最终底层就会发送  /error请求**
+
+   - `BasicErrorController` 会来处理 /error请求
+
+   - 找到handler：`BasicErrorController` 的errorHtml方法
+
+     ![image-20210221212508959](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221212508959.png)
+
+   - 得到一系列错误的相关信息：
+
+     ![image-20210221212936627](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221212936627.png)
+
+   - ```java
+     public ModelAndView errorHtml(HttpServletRequest request, HttpServletResponse response) {
+         HttpStatus status = this.getStatus(request);
+         Map<String, Object> model = Collections.unmodifiableMap(this.getErrorAttributes(request, this.getErrorAttributeOptions(request, MediaType.TEXT_HTML)));
+         response.setStatus(status.value());
+         ModelAndView modelAndView = this.resolveErrorView(request, response, status, model);
+         return modelAndView != null ? modelAndView : new ModelAndView("error", model);
+     }
+     ```
+
+   - 解析错误视图：遍历所有的ErrorViewResolver，看谁能够解析这个异常 **默认只有一个ErrorViewResolver（自动配置类中放置的`DefaultErrorViewResolver`  ）**
+
+      先得到页面名称，再根据页面名称来判断是否能找到模板引擎 --> `ThymeleafTemplateAvailabilityProvider`，
+
+     **有模板引擎就使用模板引擎来解析这个视图名称："/error/500"，自动加上themeleaf的前后缀，如果没有才使用`resolveResource()`**![image-20210221213745339](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221213745339.png)
+
+     若没有模板引擎：使用`resolveResource()`方法为errorViewName加上.html后缀，并返回html页面
+
+     ![image-20210221214513851](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210221214513851.png)
+
+
+
+
+
+
+
+
+
+----
+
+
+
+#### 404处理流程
+
+
+
+发送一个不存在的资源/请求，找不到对应Controller的Handler方法后，会认为要找静态资源，于是在下面四个地址中去寻找
+
+![image-20210222050756714](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222050756714.png)
+
+
+
+
+
+> 中间的流程没太读懂....
+
+
+
+在找不到资源后，同样发送一个/error请求：
+
+![image-20210222052230505](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222052230505.png)
+
+然后BasicController来返回errorView      status：404
+
+![image-20210222052325468](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222052325468.png)
+
+
+
+
+
+
+
+
+
+### 定制错误处理逻辑
+
+
+
+#### 自定义错误页
+
+- error/404.html   error/5xx.html；**有精确的错误状态码页面**就匹配精确，没有就找**4xx.html**；如果有没有就触发白页
+
+400错误  Bad Request
+
+![image-20210222015743592](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222015743592.png)
+
+
+
+将404.html修改为4xx.html
+
+并打印状态以及错误消息：
+
+![image-20210222020238181](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222020238181.png)
+
+![image-20210222020308333](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222020308333.png)
+
+
+
+
+
+
+
+----
+
+
+
+
+
+#### @ControllerAdvice + @ExceptionHandler处理全局异常
+
+
+
+```java
+/**
+ * 处理整个web controller的异常
+ */
+@Slf4j
+@ControllerAdvice
+public class GlobalExceptionHandler {
+		//当前是异常处理器handler  标注处理哪些类型的异常？
+    @ExceptionHandler({ArithmeticException.class, NullPointerException.class})
+    public String handleArithException(Exception e){
+        log.error("异常："+ e);
+        return "login";//视图地址 ModelAndView
+    }
+}
+```
+
+
+
+分析：
+
+
+
+- `processHandlerException`处理异常，遍历所有handler异常解析器
+
+  ![image-20210222021528657](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222021528657.png)
+
+  0. 哪个方法标了**`@ExceptionHandler`注解**
+
+在 `ExceptionHandlerExceptionResover`中找到标注注解的方法，用来执行处理异常的方法![image-20210222022250436](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222022250436.png)
+
+这个处理异常的方法被当成一个正常的方法去执行，并且获得返回值：包装的是一个Exception对象：
+
+![image-20210222022551856](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222022551856.png)
+
+
+
+
+
+> 在 `ExceptionHandlerExceptionResolver#doResolveHandlerMethodException`方法中：
+>
+> 执行：`exceptionHandlerMethod.invokeAndHandle(webRequest, mavContainer, arguments);`，**来获得请求参数及其值**，
+>
+> ![image-20210222022859671](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222022859671.png)
+>
+> 正常返回，封装了一个Exception对象
+
+将返回值“login”作为viewname封装在mavContainer中：
+
+![image-20210222023220126](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222023220126.png)
+
+继而获得mav对象并返回
+
+
+
+- 在 `processHandlerException`方法中就获得了异常解析器解析得到的mav对象（没有标注@ExceptionHandler就没有返回结果，跳转到/error请求）
+
+
+
+- 接着 `processDispatchResult`方法得到了mav对象，并且此时mav含有需要跳转的视图view。渲染这个页面：
+
+  ```java
+  // Did the handler return a view to render?
+  if (mv != null && !mv.wasCleared()) {
+      //渲染流程
+     render(mv, request, response);
+     if (errorView) {
+        WebUtils.clearErrorRequestAttributes(request);
+     }
+  }
+  ```
+
+> 底层是  **ExceptionHandlerExceptionResolver类提供支持，专门处理@ExceptionHandler注解**
+
+
+
+
+
+#### @ResponseStatus+自定义异常
+
+
+
+
+
+```java
+//403  自定义错误消息   这个reason就是错误消息中的message
+@ResponseStatus(value = HttpStatus.FORBIDDEN, reason = "用户数量太多")
+public class UserTooManyException extends RuntimeException {
+    public UserTooManyException(String message){
+        super(message);
+    }
+    public UserTooManyException(){
+
+    }
+}
+```
+
+
+
+```java
+@GetMapping("/dynamic_table")
+public String dynamic_table(Model model){
+
+    //表格的内容是动态遍历的
+    List<User> users = Arrays.asList(new User("zhangsan", "123456"),
+            new User("lisi", "123123"),
+            new User("aaa", "123321"),
+            new User("bbb", "123111"));
+    model.addAttribute("users",users);
+    if(users.size() > 3){
+        throw new UserTooManyException();
+    }
+    return "table/dynamic_table";
+}
+```
+
+
+
+![image-20210222024728588](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222024728588.png)
+
+
+
+---
+
+
+
+分析：
+
+- catch到自定义的异常
+
+![image-20210222034900591](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222034900591.png)
+
+
+
+- 解析异常：
+
+  使用`ResponseStatusExceptionResolver`可以解析注解 `@ResponseStatus`
+
+
+
+```java
+//ResponseStatusExceptionResolver#doResolveException
+//解析出注解中包含的信息并封装到status中，再将status封装进ModelAndView并返回
+ResponseStatus status = AnnotatedElementUtils.findMergedAnnotation(ex.getClass(), ResponseStatus.class);
+if (status != null) {
+   return resolveResponseStatus(status, request, response, handler, ex);
+}
+```
+
+![image-20210222035904356](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222035904356.png)
+
+![image-20210222040110702](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222040110702.png)
+
+> **将@ResponseStatus注解的信息组装成ModelAndView返回**
+>
+> *底层调用SendError方法：相当于给Tomcat发了一个/error请求 ↑*
+>
+> ***并且一旦发送了 `response.sendError()`，这次请求就结束了！***
+>
+> `return new ModelAndView();`返回了一个空的ModelAndView对象回去
+
+**ModelAndView也是空的**，没有封装任何信息，因为转发/error请求已经发出去了
+
+![image-20210222040410110](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222040410110.png)
+
+
+
+- 给 `rocessDispatchResult`方法返回了null   ----->   **相当于任何解析器都没能解析   其实是解析了，只不过sendError，不再返回ModelAndView对象了**
+
+
+
+- 然后再次给服务器发/error请求：   随后转发到错误页面
+
+  ![image-20210222041104654](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222041104654.png)
+
+
+
+
+
+
+
+#### Spring底层的异常，如参数类型转换异常
+
+
+
+
+
+**记录异常： `MissingServletRequestParameterException`**
+
+![image-20210222041507699](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222041507699.png)
+
+
+
+- `DefaultExceptionHandlerResolver` **来处理框架底层的异常（spring框架定义的异常）** ，判断异常的类型：
+
+  ![image-20210222041909260](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222041909260.png)
+
+![image-20210222042245641](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222042245641.png)
+
+```java
+protected ModelAndView handleMissingServletRequestParameter(MissingServletRequestParameterException ex,
+      HttpServletRequest request, HttpServletResponse response, @Nullable Object handler) throws IOException {
+	//又执行sendError操作    int SC_BAD_REQUEST = 400;   并保存异常的信息
+   response.sendError(HttpServletResponse.SC_BAD_REQUEST, ex.getMessage());
+   return new ModelAndView();
+}
+```
+
+
+
+**此次请求立即结束，Tomcat服务器再发出一个/error请求**
+
+> **若/error请求未得到响应，就返回最原始的响应页面：**
+>
+> ![image-20210222042354695](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222042354695.png)
+>
+> 
+>
+> 而现在SpringMVC底层有 `BasicErrorController`来处理/error请求
+
+
+
+
+
+
+
+#### 自定义实现HandlerExceptionResolver
+
+
+
+```java
+@Component
+public class CustomerHandlerExceptionResolver implements HandlerExceptionResolver {
+    @Override
+    public ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        try {
+            response.sendError(666,"搞一个错误~");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return new ModelAndView();
+        //return new ModelAndView("login").addObject("msg", "###有一个错误###");
+    }
+}
+```
+
+
+
+
+
+
+
+可以看到多出了一个自定义的HandlerExceptionResolver
+
+![image-20210222044301472](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222044301472.png)
+
+
+
+**但我们这个异常解析器现在不能生效！！因为在这之前DefaultHandlerExceptionResolver就已经解析完成**
+
+
+
+想要让自定义的异常解析器生效：指定顺序
+
+
+
+```java
+@Order(value = Ordered.HIGHEST_PRECEDENCE)//数组越小，优先级越高
+@Component
+public class CustomerHandlerExceptionResolver implements HandlerExceptionResolver {
+```
+
+顺序调到了第一位：
+
+![image-20210222044822754](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222044822754.png)
+
+> 并且因为方法resolveException返回了ModelAndView对象了，所以轮不到其他的异常解析器来解析，**直接中断遍历并返回了**
+
+
+
+:+1:古德古德
+
+![image-20210222044722718](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222044722718.png)
+
+
+
+
+
+
+
+---
+
+
+
+当然也可以指定一个返回页面：
+
+```java
+@Order(value = Ordered.HIGHEST_PRECEDENCE)//数组越小，优先级越高
+@Component
+public class CustomerHandlerExceptionResolver implements HandlerExceptionResolver {
+    @Override
+    public ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        return new ModelAndView("login").addObject("msg", "###有一个错误###");
+    }
+}
+```
+
+
+
+![image-20210222045049131](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222045049131.png)
+
+
+
+-----
+
+问题来了：
+
+**所有的异常**现在都会显示：
+
+![image-20210222045924620](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210222045924620.png)
+
+。。。。。。。。
+
+**自定义异常处理器优先级太高了。。**，可以作为默认的全局异常处理规则
+
+
+
+
+
+
+
+#### ErrorViewResolver
+
+
+
+实现自定义解析异常视图？
+
+
+
+- response.sendError()  /error请求就会转给Controller
+- 异常没有任何解析器能处理，tomcat底层也会转给Controller
+
+Controller最终要去到`ErrorView`，是由`ErrorViewResolver`解析的  --->  error/4xx.html
+
+- 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
