@@ -1551,6 +1551,7 @@ public interface OrderMapper {
 
     @Select("select *, o.id oid from orders o, user u where o.uid=u.id")
     @Results({
+        		//将每个查询到的结果封装进实体对象
             @Result(column = "oid", property = "id"),
             @Result(column = "ordertime", property = "ordertime"),
             @Result(column = "total", property = "total"),
@@ -1607,6 +1608,8 @@ public interface OrderMapper {
             @Result(column = "ordertime", property = "ordertime"),
             @Result(column = "total", property = "total"),
             @Result(
+                
+                //这里将user属性当成一个整体  通过子查询来封装数据进user对象
                    property = "user", //要封装的属性名称
                    column = "uid",   //根据哪个字段去查询user表的数据
                    javaType = User.class,  //要封装的实体类型
@@ -1644,6 +1647,8 @@ public interface OrderMapper {
 
 
 ![image-20210209013538616](../picture/Mybatis%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/image-20210209013538616.png)
+
+**一对多：使用List来接收user对象集合**
 
 
 
@@ -1758,7 +1763,7 @@ public interface RoleMapper {
 
     @Select("select * from sys_user_role ur, sys_role r where ur.roleId=r.id and ur.userId=#{uid}")
     //因为要查的是user对象，role为user对象的参数
-    //根据每个唯一的uid作为查找对象，  在中间表中匹配uid   再通过rid匹配role表中id
+    //根据每个唯一的uid作为查找对象，  在中间表中找到uid对应的rid   再通过rid匹配role表中id
     //最终找出uid对应的所有role对象
     public List<Role> findByUid(int uid);
 }

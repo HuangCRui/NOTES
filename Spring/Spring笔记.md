@@ -1389,7 +1389,7 @@ public static void main(String[] args) throws SQLException {
 
 
 
-在测试类中，没法测试方法都有以下两行代码：
+在测试类中，测试方法都有以下两行代码：
 
 ```java
  ApplicationContext ac = new ClassPathXmlApplicationContext("bean.xml");
