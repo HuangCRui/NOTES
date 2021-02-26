@@ -1,5 +1,3 @@
-
-
 ![image-20210211025342522](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210211025342522.png)
 
 
@@ -957,7 +955,7 @@ public class MyConfig {
 
 
 
-> properties中自定义的属性，想绑给哪个javaBean都可以
+> properties中自定义的属性，想绑给哪个**javaBean->一定要在容器中的组件**都可以
 
 
 
@@ -1006,7 +1004,7 @@ public @interface EnableAutoConfiguration {}
 
 `@AutoConfigurationPackage`，
 
-> 自动配置包？指定了默认的包规则
+> 自动配置包？指定了默认的**包规则**
 >
 > **即 `MainApplication` 所在的这个包**
 
@@ -1029,17 +1027,15 @@ public @interface AutoConfigurationPackage {}
 
 ![image-20210212045236399](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210212045236399.png)
 
-
-
-
+↓
 
 得到的包名    **此时注解标注在主类上，主类在com.demo1包中**
 
 ![image-20210212045401125](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210212045401125.png)
 
+↓
 
-
-**Registrar将main程序所在包下的所有组件，批量注册**
+**Registrar将main程序所在包下的所有组件（如@Controller、@Service、@Mapper、@Component......），批量注册**
 
 ![image-20210212045534613](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210212045534613.png)
 
@@ -1061,23 +1057,19 @@ public @interface AutoConfigurationPackage {}
 
 ![image-20210212050549253](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210212050549253.png)
 
+↓
 
-
-利用 `getAutoConfigurationEntry`给容器中批量导入一些组件
+利用 **`getAutoConfigurationEntry方法`**给容器中批量导入一些组件
 
 
 
 这里面的组件都默认导入容器中
 
-![image-20210212050833413](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210212050833413.png)
-
-
-
-
+↓
 
 然后：调用 `List<String> configurations = getCandidateConfigurations(annotationMetadata, attributes);`**获取到所有需要导入到容器中的配置类**
 
-
+在getCandidateConfigurations方法中：
 
 利用工厂：
 
@@ -1086,15 +1078,17 @@ List<String> configurations = SpringFactoriesLoader.loadFactoryNames(getSpringFa
       getBeanClassLoader());
 ```
 
+↓
+
 加载：
 
-`Map<String, List<String>> loadSpringFactories(ClassLoader classLoader)` **得到所有组件**
+**`Map<String, List<String>> loadSpringFactories(ClassLoader classLoader)`** **得到所有组件**
 
+即：
 
+**从 `"META-INF/spring.factories"`** 位置来**获取需要加载的类**
 
-从 `"META-INF/spring.factories"` 位置来**加载一个文件**
-
-默认扫描当前系统里面所有 `"META-INF/spring.factories"`位置的文件
+默认扫描当前系统里面**所有 `"META-INF/spring.factories"`位置的文件**
 
 
 
@@ -1110,9 +1104,15 @@ List<String> configurations = SpringFactoriesLoader.loadFactoryNames(getSpringFa
 
 
 
-文件里面写死了springboot一启动就要给容器中加载的所有配置类
+文件里面写死了springboot一启动就要给容器中**加载的所有配置类**
 
 ![image-20210212052225767](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210212052225767.png)
+
+
+
+**最终得到所有需要自动加载autoconfiguration  的类**
+
+![image-20210212050833413](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210212050833413.png)
 
 
 
@@ -9995,11 +9995,60 @@ https://github.com/codecentric/spring-boot-admin
 
 
 
+参照文档
+
+https://codecentric.github.io/spring-boot-admin/2.3.1/#getting-started
+
+
+
+创建一个server：
 
 
 
 
 
+
+
+应用成功上线
+
+![image-20210226151300765](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226151300765.png)
+
+
+
+
+
+使用ip注册：
+
+```yaml
+spring:
+    boot:
+      admin:
+        client:
+          url: http://localhost:8888
+
+          instance:
+            prefer-ip: true #使用ip注册进来
+application:
+  name: boot-web-admin
+```
+
+
+
+![image-20210226151713560](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226151713560.png)
+
+
+
+![image-20210226151926902](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226151926902.png)
+
+
+
+![image-20210226151941550](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226151941550.png)
+
+
+
+
+
+**监控应用底层的actuator**
 
 
 
@@ -10365,6 +10414,101 @@ public class MyServiceEndPoint {
 
 
 
+# 原理解析
+
+
+
+
+
+
+
+## Profile功能
+
+
+
+为了方便**多环境适配**，springboot简化了profile功能。
+
+
+
+
+
+
+
+### application-profile功能
+
+
+
+- 默认配置文件  application.yaml；任何时候都会加载
+- 指定环境配置文件  application-{env}.yaml
+- 激活指定环境
+
+- - 配置文件激活
+  - 命令行激活：java -jar xxx.jar --**spring.profiles.active=prod  --person.name=haha**
+
+- - - **修改配置文件的任意值，命令行优先**
+
+- 默认配置与环境配置同时生效
+- **同名**配置项，**profile配置优先**
+
+
+
+```yaml
+person.name=zhangsan
+spring.profiles.active=test # 在默认配置文件中指定激活的环境
+server.port=8080
+```
+
+
+
+```yaml
+person:
+  name: test-张三
+server:
+  port: 7000
+```
+
+
+
+![image-20210226155125293](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226155125293.png)
+
+
+
+
+
+
+
+
+
+### @Profile条件装配功能
+
+```java
+@Configuration(proxyBeanMethods = false)
+@Profile("production")//还可以标在方法上，只有在指定的环境下，指定的方法/类才生效   
+public class ProductionConfiguration {
+
+    // ...
+
+}
+```
+
+
+
+
+
+### profile分组
+
+
+
+
+
+```properties
+spring.profiles.group.production[0]=proda
+spring.profiles.group.production[1]=prodb
+
+spring.profiles.group.mytest[0]=test
+
+使用：--spring.profiles.active=production  # 两个环境都加载进来  其中的值都显示（若为互补）
+```
 
 
 
@@ -10376,10 +10520,495 @@ public class MyServiceEndPoint {
 
 
 
+## 外部化配置
+
+
+
+1. Default **properties** (specified by setting `SpringApplication.setDefaultProperties`).
+2. [`@PropertySource`](https://docs.spring.io/spring/docs/5.3.1/javadoc-api/org/springframework/context/annotation/PropertySource.html) annotations on your `@Configuration` classes. Please note that such property sources are not added to the `Environment` until the application context is being refreshed. This is too late to configure certain properties such as `logging.*` and `spring.main.*` which are read before refresh begins.
+3. **Config data (such as** **`application.properties`** **files)**
+4. A `RandomValuePropertySource` that has properties only in `random.*`.
+5. **OS environment variables**.
+6. Java System **properties** (`System.getProperties()`).
+7. JNDI attributes from `java:comp/env`.
+8. `ServletContext` init parameters.
+9. `ServletConfig` init parameters.
+10. Properties from `SPRING_APPLICATION_JSON` (inline JSON embedded in an environment variable or system property).
+11. **Command line** arguments.
+12. `properties` attribute on your tests. Available on [`@SpringBootTest`](https://docs.spring.io/spring-boot/docs/2.4.0/api/org/springframework/boot/test/context/SpringBootTest.html) and the [test annotations for testing a particular slice of your application](https://docs.spring.io/spring-boot/docs/current/reference/html/spring-boot-features.html#boot-features-testing-spring-boot-applications-testing-autoconfigured-tests).
+13. [`@TestPropertySource`](https://docs.spring.io/spring/docs/5.3.1/javadoc-api/org/springframework/test/context/TestPropertySource.html) annotations on your tests.
+14. [Devtools global settings properties](https://docs.spring.io/spring-boot/docs/current/reference/html/using-spring-boot.html#using-boot-devtools-globalsettings) in the `$HOME/.config/spring-boot` directory when devtools is active.
 
 
 
 
+
+可以获得系统的环境变量、属性：
+
+![image-20210226182810507](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226182810507.png)
+
+![image-20210226183750677](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226183750677.png)
+
+
+
+
+
+### 外部配置源
+
+
+
+常用：**Java属性文件**、**YAML文件**、**环境变量**、**命令行参数**；都可以获取到
+
+
+
+> **指定环境优先，外部优先，后面的方法可以覆盖前面的同名配置项**
+
+
+
+
+
+
+
+### 配置文件查找位置
+
+(1) classpath 根路径   **/java  /resources**
+
+(2) classpath 根路径下config目录
+
+(3) jar包当前目录
+
+(4) jar包当前目录的config目录
+
+(5) /config子目录的直接子目录（linux目录）
+
+
+
+> 从前向后依次加载，**后面的方法可以覆盖前面的同名配置项**
+
+
+
+
+
+
+
+### 配置文件加载顺序：
+
+1. 　当前jar包内部的application.properties和application.yml
+2. 　当前jar包内部的application-{profile}.properties 和 application-{profile}.yml
+3. 　引用的外部jar包的application.properties和application.yml
+4. 　引用的外部jar包的application-{profile}.properties 和 application-{profile}.yml
+
+
+
+> 制定环境优先，外部优先，**后面的方法可以覆盖前面的同名配置项**
+
+
+
+
+
+
+
+
+
+
+
+## 自定义starter
+
+
+
+
+
+### starter启动原理
+
+
+
+starter-pom引入 **autoconfigurer** 包
+
+
+
+![image-20210226194142551](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226194142551.png)
+
+
+
+
+
+
+
+
+
+
+
+![image-20210226195238615](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226195238615.png)
+
+
+
+
+
+
+
+- autoconfigure包中配置使用 **META-INF/spring.factories** 中 **EnableAutoConfiguration 的值，使得项目启动加载指定的自动配置类**
+- **编写自动配置类 xxxAutoConfiguration -> xxxxProperties**
+
+- - **@Configuration**
+  - **@Conditional**
+  - **@EnableConfigurationProperties**
+  - **@Bean**
+  - ......
+
+> **引入starter** **--- xxxAutoConfiguration --- 容器中放入组件 ---- 绑定xxxProperties ----** **配置项**
+
+
+
+
+
+
+
+
+
+### 自定义starter
+
+**atguigu-hello-spring-boot-starter（启动器）**
+
+**atguigu-hello-spring-boot-starter-autoconfigure（自动配置包）**
+
+
+
+
+
+
+
+# SpringBoot原理
+
+
+
+Spring原理【[Spring注解](https://www.bilibili.com/video/BV1gW411W7wy?p=1)】、**SpringMVC**原理、**自动配置原理**、SpringBoot原理
+
+
+
+
+
+## SpringBoot启动过程
+
+
+
+- **创建SpringApplication----------------------------------------------------------------------------------**
+
+  - 保存一些信息，
+
+  - 判定当前应用的类型，ClassUtils->Servlet
+
+  - bootstrappers ，初始启动引导器 List，去spring.factories文件中找org.springframework.boot.Bootstrapper类型
+
+  - 找 `ApplicationContextInitializer`初始化器，也是 **`去spring.factories文件中找指定的组件ApplicationContextInitializer`**
+
+    - **这里还有一个RestartScopeInitializer是springboot-devtools调用的**
+    - ![image-20210226232758715](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226232758715.png)
+    - ![image-20210226232900069](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226232900069.png)
+
+  - 找 **`ApplicationListener`应用监听器**。也**是在spring.factories文件中找**
+
+    - ![image-20210226233147179](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226233147179.png)
+
+  - ```java
+    public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
+       this.resourceLoader = resourceLoader;
+       Assert.notNull(primarySources, "PrimarySources must not be null");
+       this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+       this.webApplicationType = WebApplicationType.deduceFromClasspath();
+        //getSpringFactoriesInstances  从spring.factories找对应类型
+        //Bootstrapper
+       this.bootstrappers = new ArrayList<>(getSpringFactoriesInstances(Bootstrapper.class));
+        //ApplicationContextInitializer
+       setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+        //ApplicationListener
+       setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+        //找第一个有main方法的作为主程序
+       this.mainApplicationClass = deduceMainApplicationClass();
+    }
+    ```
+
+
+
+
+
+---
+
+
+
+- **运行SpringApplication-------------------------------------------------------------------------**
+
+  - ```java
+    return new SpringApplication(primarySources).run(args);
+    ```
+
+  - StopWatch：记录应用的启动时间
+
+  - 创建引导上下文 `createBootstrapContext`，context环境
+
+    - 如果在构造的时候找到了bootstrappers，遍历并执行`Bootstrappers`接口的intitialize()方法来完成对引导启动器上下文环境设置
+
+  - 让当前应用进入headless模式 `java.awt.headless`
+
+  - 获取所有**RunListener（运行监听器）**   [为了方便所有Listener进行事件感知]
+
+    - 通过 `getSpringFactoriesInstances`在spring.factories文件中获取 **`SpringApplicationRunListener.class`**(**接口**)
+    - ![image-20210226234437869](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226234437869.png)
+    - ![image-20210227020227483](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210227020227483.png)
+
+  - `listeners.starting`,遍历所有的SpringApplicationRunListener，调用**starting**方法，
+
+    - **通知事件--->相当于通知所有感兴趣系统正在启动过程的人，项目正在starting**
+
+  - 保存命令行参数 `ApplicationArguments`
+
+  - 准备环境 `prepareEnvironment`
+
+    - 返回或者创建基础环境信息对象， `StandardServletEnvironment`
+    - 配置环境信息对象，读取所有的配置源的配置属性值  profiles
+    - 绑定环境信息
+    - 监听器调用`environmentPrepared`方法，遍历每个listener，再调用各自**`environmentPrepared`**方法。**通知所有的监听器当前环境准备完成**
+    - 返回环境信息
+
+  - 打印banner
+
+  - **`createApplicationContext`，创建IOC容器**
+
+    - 根据当前项目类型->Servlet，创建容器
+    - 当前会创建 `AnnotationConfigServletWebServerApplicationContext`
+
+  - **准备ApplicationContext   IOC容器的基本信息**  --->  `prepareContext()`
+
+    - 保存环境信息
+    - IOC容器的后置处理流程
+    - 应用初始化器 `applyInitializers(context)`。**使用前面准备好的initializers**
+      - 遍历所有的`ApplicationContextInitializer`，调用 `initialize(context)`方法，来对ioc容器进行初始化的扩展
+    - 遍历所有的listeners ，**`listeners.contextPrepared(context);`**  
+      - `EventPublishingRunListener`
+      - 通知所有的监听器context准备好了
+    - 监听器调用 **`listeners.contextLoaded(context);`**，**通知IOC容器已经加载完毕了**
+
+  - 刷新IOC容器  `refreshContext(context);`
+
+    - ```java
+      //org.springframework.context.support.AbstractApplicationContext#refresh
+      // Instantiate all remaining (non-lazy-init) singletons.
+      //实例化容器中的所有组件  单实例！
+      finishBeanFactoryInitialization(beanFactory);
+      ```
+
+  - 容器刷新完成后 `afterRefresh`  。。。do nothing
+
+  - 所有监听器调用started方法 **`listeners.started(context);`** **通知所有监听器已经启动了**
+
+    - `SpringApplicationRunListener`的各种功能，都使用到了
+    - ![image-20210227014427738](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210227014427738.png)
+
+  - 调用所有的**runners `callRunners(context, applicationArguments);`**
+
+    - 获取**容器**中的`ApplicationRunner` **接口**
+    - 获取**容器**中的`CommandLineRunner` **接口**
+    - 合并所有runners，并且按照@Order进行排序
+    - 遍历所有的runner，调用两种runner各自的**run方法**
+
+  - **如果以上有异常，调用listener的failed方法**
+
+  - 调用所有监听器的running方法：**`listeners.running(context);`**  **项目正在运行**
+
+  - running如果有问题，继续通知所有监听器的failed方法
+
+- **结束，返回 IOC容器`ConfigurableApplicationContext`**
+
+> 如果添加了依赖spring-boot-devtools，则会**重启**再执行
+>
+> 见：https://www.wencst.com/archives/1108
+>
+> ![image-20210227003552947](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210227003552947.png)
+
+
+
+
+
+
+
+## Application Events and Listeners
+
+
+
+https://docs.spring.io/spring-boot/docs/current/reference/html/spring-boot-features.html#boot-features-application-events-and-listeners
+
+**ApplicationContextInitializer**
+
+**ApplicationListener**
+
+**SpringApplicationRunListener**
+
+
+
+这三个组件，都是在**spring.factories**配置文件中找的，**getSpringFactoriesInstances()**
+
+
+
+
+
+```java
+public class MySpringApplicationRunListener implements SpringApplicationRunListener {
+
+    private SpringApplication springApplication;
+    //需要有参构造器
+    public MySpringApplicationRunListener(SpringApplication application, String[] args) {
+        this.springApplication = application;
+    }
+
+    @Override
+    public void starting(ConfigurableBootstrapContext bootstrapContext) {
+        System.out.println("MySpringApplicationRunListener ... starting...");
+    }
+
+    @Override
+    public void starting() {
+        System.out.println("MySpringApplicationRunListener ... starting...");
+
+    }
+
+    @Override
+    public void environmentPrepared(ConfigurableBootstrapContext bootstrapContext, ConfigurableEnvironment environment) {
+        System.out.println("MySpringApplicationRunListener ... environmentPrepared...");
+
+    }
+
+    @Override
+    public void environmentPrepared(ConfigurableEnvironment environment) {
+        System.out.println("MySpringApplicationRunListener ... environmentPrepared...");
+
+    }
+
+
+
+    @Override
+    public void contextLoaded(ConfigurableApplicationContext context) {
+        System.out.println("MySpringApplicationRunListener ... contextLoaded...");
+
+    }
+
+    @Override
+    public void started(ConfigurableApplicationContext context) {
+        System.out.println("MySpringApplicationRunListener ... started...");
+
+    }
+
+    @Override
+    public void running(ConfigurableApplicationContext context) {
+        System.out.println("MySpringApplicationRunListener ... running...");
+
+    }
+
+    @Override
+    public void failed(ConfigurableApplicationContext context, Throwable exception) {
+        System.out.println("MySpringApplicationRunListener ... failed...");
+
+    }
+}
+```
+
+
+
+```java
+public class MyApplicationListener implements ApplicationListener {
+    @Override
+    public void onApplicationEvent(ApplicationEvent event) {
+        System.out.println("MyApplicationListener... onApplicationEvent...");
+    }
+}
+```
+
+![image-20210227034252055](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210227034252055.png)
+
+
+
+```java
+public class MyApplicationContextInitializer implements ApplicationContextInitializer {
+    @Override
+    public void initialize(ConfigurableApplicationContext applicationContext) {
+        System.out.println("MyApplicationContextInitializer....initialize...");
+    }
+}
+```
+
+
+
+**spring.factories**
+
+```properties
+# MyApplicationContextInitializer
+org.springframework.context.ApplicationContextInitializer=\
+  com.example.bootweb01.listener.MyApplicationContextInitializer
+
+# MyApplicationListener
+org.springframework.context.ApplicationListener=\
+  com.example.bootweb01.listener.MyApplicationListener
+
+# MySpringApplicationRunListener
+org.springframework.boot.SpringApplicationRunListener=\
+  com.example.bootweb01.listener.MySpringApplicationRunListener
+```
+
+
+
+
+
+
+
+
+
+
+
+## ApplicationRunner 与 CommandLineRunner
+
+
+
+这两个组件需要从 **容器中得到**
+
+
+
+```java
+@Order(1)
+//放到容器中
+@Component
+public class MyCommandLineRunner implements CommandLineRunner {
+    @Override
+    public void run(String... args) throws Exception {
+        System.out.println("MyCommandLineRunner... run");
+    }
+}
+```
+
+
+
+
+
+```java
+//应用启动做一个一次性事情，使用这两个Runner
+@Order(2)//数字越大，优先级越高
+@Component
+public class MyApplicationRunner implements ApplicationRunner {
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        System.out.println("MyApplicationRunner... run...");
+    }
+}
+```
+
+
+
+
+
+
+
+
+
+![image-20210227034057201](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210227034057201.png)
+
+![image-20210227034135053](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210227034135053.png)
 
 
 
@@ -10574,6 +11203,19 @@ public WebMvcAutoConfigurationAdapter(WebProperties webProperties, WebMvcPropert
 
 
 
+## classpath:
+
+
+
+在main包下的java和resources路径**中**的所有资源，直接都会放到classes路径下
+
+![image-20210226191703998](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226191703998.png)
+
+
+
+(config是resources中的文件夹)
+
+![image-20210226191805296](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210226191805296.png)
 
 
 
@@ -10587,6 +11229,7 @@ public WebMvcAutoConfigurationAdapter(WebProperties webProperties, WebMvcPropert
 
 
 
+## @EnableConfigurationProperties
 
 
 
@@ -10594,19 +11237,15 @@ public WebMvcAutoConfigurationAdapter(WebProperties webProperties, WebMvcPropert
 
 
 
+@EnableConfigurationProperties(xxxProperties.class)注解的作用是：使    **使用 @ConfigurationProperties 注解的类**生效。
 
 
 
+> 如果一个配置类只配置了@ConfigurationProperties注解，而没有使用@Component，那么在IOC容器中是获取不到properties 类转化的bean，其中的数据也就无法拿到。
+>
+> @EnableConfigurationProperties 相当于把  **使用了配置文件中的值  的properties类**    注入到了容器中
 
-
-
-
-
-
-
-
-
-
+也可以：不使用 `@EnableConfigurationProperties` 进行注册，使用 `@Component` 注册，达到相同的效果
 
 
 
