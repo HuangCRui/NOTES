@@ -818,11 +818,15 @@ bin/jlink --module-path jmods --add-modules java.desktop --output jre
 
 
 
+```
+vim /etc/profile
+```
+
 
 
 配置java环境变量
 
-
+添加：
 
 ```properties
 #set java environment
@@ -833,6 +837,12 @@ export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar:$JRE_HOME/lib
 ```
 
 
+
+刷新配置
+
+```
+source /etc/profile
+```
 
 
 
