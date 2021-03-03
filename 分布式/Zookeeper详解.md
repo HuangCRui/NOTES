@@ -1083,41 +1083,138 @@ public void exists() throws KeeperException, InterruptedException {
 
 
 
+## 4.4 模拟美团商家上下线
 
 
 
 
 
+需求：
 
+- 模拟美团服务平台，商家营业通知，商家打烊通知
+- 在根节点下，创建好/meituan节点
 
 
 
 
 
+### ShopService
 
+```java
+public class ShopService {
 
+    private String connectString = "192.168.150.128:2181,192.168.150.129:2181,192.168.150.130:2181";
+    private int sessionTimeOut = 60*1000;
+    private ZooKeeper zkClient;
+    //创建客户端，连接到Zookeeper
+    public void connect() throws IOException {
+        zkClient = new ZooKeeper(connectString, sessionTimeOut, new Watcher() {
+            @Override
+            public void process(WatchedEvent watchedEvent) {
 
+            }
+        });
+    }
 
+    //注册到Zookeeper
+    public void register(String shopname) throws KeeperException, InterruptedException {
+        //一定要创建临时有序的节点（营业）
+        //因为：可以自动编号；断开时节点自动删除(打烊)
+        String s = zkClient.create("/meituan/"+shopname, shopname.getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
+        System.out.println(shopname + " 开始营业了！");
+    }
 
+    public static void main(String[] args) throws IOException, KeeperException, InterruptedException {
+        //1.开一个饭店
+        ShopService shop = new ShopService();
 
 
+        //2.连接Zookeeper集群(和美团取得联系)
+        shop.connect();
 
+        //3.将服务节点注册到Zookeeper(入驻美团)
+        //需要传入参数
+        shop.register(args[0]);
 
+        //4.业务逻辑代码处理（做生意）
+        shop.business(args[0]);
 
+    }
 
+    //做生意
+    private void business(String shopName) throws IOException {
+        System.out.println(shopName + " 火爆营业中！");
+        //一直监听
+        System.in.read();
+    }
+}
+```
 
 
 
 
 
+### Customers
 
+```java
+//消费者
+public class Customers {
 
+    public static void main(String[] args) throws IOException, KeeperException, InterruptedException {
+        //1.获得Zookeeper的连接（用户打开美团app）
+        Customers client = new Customers();
+        client.connect();
 
+        //2.获取/meituan下的所有子节点(获取商家列表)
+        client.getShopList();
 
+        //3.业务逻辑处理(对比商家，下单点餐)
+        client.business();
+    }
 
+    private void business() throws IOException {
+        System.out.println("用户正在浏览商家。。。");
+        //这里是希望这个线程一直运行，等待服务器上节点变化，来得到监听器的反馈
+        //如果不等待，这个类只运行一次
+        //一旦监听到服务器节点变化，Zookeeper客户端的监听器就会执行process方法
+        System.in.read();
+    }
 
+    //获取商家列表
+    private void getShopList() throws KeeperException, InterruptedException {
+        //1.获得服务器的子节点信息并且对父节点进行监听，
+        List<String> shops = zkClient.getChildren("/meituan", true);
+        //2.声明储存服务器信息的集合
+        ArrayList<String> shopList = new ArrayList<>();
+        for(String shop : shops){
+            //节点上的数据
+            //如果节点上没有存入数据，会出现nullpointerexception
+            byte[] data = zkClient.getData("/meituan/" + shop, false, new Stat());
+            shopList.add(new String(data));
+        }
 
+        System.out.println("目前正在营业的商家："+shopList);
+    }
 
+    private String connectString = "192.168.150.128:2181,192.168.150.129:2181,192.168.150.130:2181";
+    private int sessionTimeOut = 60*1000;
+    private ZooKeeper zkClient;
+    private void connect() throws IOException {
+        zkClient = new ZooKeeper(connectString, sessionTimeOut, new Watcher() {
+            @Override
+            public void process(WatchedEvent watchedEvent) {
+                //重新再次查询商家列表，因为发生了变化
+                //商家做出信息更改不会进行监听，但如果有商家上下线，会进行监听
+                try {
+                    getShopList();
+                } catch (KeeperException | InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+    }
+}
+```
 
 
 
@@ -1127,6 +1224,7 @@ public void exists() throws KeeperException, InterruptedException {
 
 
 
+### 测试商家上下线
 
 
 
@@ -1134,10 +1232,13 @@ public void exists() throws KeeperException, InterruptedException {
 
 
 
+**如何及时知道有没有商家上下线？**
 
 
 
+在Watch监听类的process方法中做下一步处理！**连接Zookeeper时就传入的监听器**
 
+**重新查询所有商家**
 
 
 
@@ -1153,9 +1254,11 @@ public void exists() throws KeeperException, InterruptedException {
 
 
 
+以main方法带参数的形式运行：
 
 
 
+![image-20210301155030605](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301155030605.png)
 
 
 
@@ -1163,27 +1266,41 @@ public void exists() throws KeeperException, InterruptedException {
 
 
 
+同时：在customers中监听到了变化，新上线了luckin和KFC：
 
+![image-20210301155004695](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301155004695.png)
 
 
 
+如果这个时候shop窗口终止了：
 
+![image-20210301155254376](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301155254376.png)
 
+**创建的临时节点就没了**
 
+相当于下线了
 
+![image-20210301155347521](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301155347521.png)
 
 
 
+运行多个shop实例：
 
+![image-20210301155518441](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301155518441.png)
 
 
 
+新加两个饭店：
 
+![image-20210301155948788](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301155948788.png)
 
+![image-20210301155942751](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301155942751.png)
 
 
 
+关闭FKC2实例：**断开连接该客户端，创建的KFC2节点就删去了**
 
+![image-20210301160125162](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301160125162.png)
 
 
 
@@ -1191,39 +1308,504 @@ public void exists() throws KeeperException, InterruptedException {
 
 
 
+## 4.5 案例-分布式锁-商品秒杀
 
 
 
 
 
+- 锁：作用就是让当前的资源不会被其他线程访问！
 
+  - 打开锁，被锁住的资源才能被另一个人访问
 
+- 在Zookeeper中使用传统的锁引发的 **“羊群效应”**：1000个人创建节点，**只有1个人能成功**，999人需要**等待**！
 
+- > 羊群是一种很散乱的组织，平时在一起也是盲目地左冲右撞，但一旦有一只头羊动起来，其他的羊也会不假思索地一哄而上，全然不顾旁边可能有的狼和不远处更好的草。羊群效应比喻人都有一种从众心理，从众心理很容易导致盲从，而盲从往往会陷入骗局遭到失败
 
+Redis：性能高，Zookeeper：可靠性高
 
+![image-20210301160704233](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301160704233.png)
 
 
 
+**999个人都在抢，没有秩序，一哄而上**
 
 
 
+---
 
+- 避免“羊群效应”，Zookeeper采用**分布式锁**
 
+  ![image-20210301173347713](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301173347713.png)
 
 
 
+1. **所有请求进来**，在/lock下创建 **临时顺序节点**，Zookeeper会**帮你编号排序**
+2. 判断自己是不是/lock下 **最小的节点**
+   - 是：获得锁---创建节点
+   - 否：对前面小我一级的节点进行监听
+3. 获得锁请求，处理完业务逻辑，释放锁（删除节点），后一个节点得到通知（比你小的节点死了，你成为最小的了）
+4. 重复步骤2
 
 
 
+**保证占有锁的就是当前编号最小的节点**
 
 
 
 
 
+### 实现步骤
 
 
 
 
+
+### 创建数据库
+
+```mysql
+# 商品表
+CREATE table product(
+	id int primary key auto_increment, -- 商品编号
+	product_name varchar(20) not null, -- 商品名称
+	stock int not null, -- 库存-----
+	version int not null -- 版本
+)
+
+insert into product (product_name,stock,version) values("锦鲤-清空购物车-大奖",5,0)
+
+# 订单表  order是个关键字
+CREATE TABLE `order`  (
+  `id` varchar(100),
+  `pid` int NOT NULL, -- 商品编号
+  `userid` int NOT NULL,
+  PRIMARY KEY (`id`) USING BTREE
+) 
+
+```
+
+
+
+
+
+
+
+### 搭建工程
+
+使用springboot：
+
+
+
+项目结构：
+
+![image-20210302020759474](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210302020759474.png)
+
+
+
+
+
+Mybatis-Mapper接口
+
+```java
+@Mapper
+public interface OrderMapper {
+    //生成订单
+    @Insert("insert into `order` values(#{id},#{pid},#{userid})")
+    int insert(Order order);
+}
+
+@Mapper
+public interface ProductMapper {
+    //查询指定id的商品（目的是查询库存）
+    @Select("select * from product where id=#{id}")
+    Product getProduct(int id);
+
+    //减库存
+    @Update("update product set stock = stock-1 where id=#{id}")
+    int reduceStock(int id);
+}
+```
+
+
+
+
+
+service层：
+
+```java
+@Service
+public class ProductServiceImpl implements ProductService {
+    @Autowired
+    ProductMapper productMapper;
+    @Autowired
+    OrderMapper orderMapper;
+
+    @Override
+    public void reduceStock(int id) {
+        //1.获取库存,根据商品id查询商品
+        Product product = productMapper.getProduct(id);
+
+        if(product.getStock() <= 0){
+            throw new RuntimeException("已抢光！");
+        }
+
+        //2.减库存
+        int i = productMapper.reduceStock(id);
+        if(i == 1){
+            //减库存成功--生成订单
+            Order order = new Order();
+            order.setId(UUID.randomUUID().toString());//使用uuid工具帮我们生成一个订单号
+            order.setPid(id);
+            order.setUserid(101);
+            orderMapper.insert(order);
+        }else{
+            //减库存失败
+            throw new RuntimeException("减库存失败！");
+        }
+    }
+}
+```
+
+
+
+controller层：（加了Zookeeper分布式锁后）
+
+```java
+@Controller
+public class ProductAction {
+
+    @Autowired
+    ProductService productService;
+
+    @ResponseBody
+    @GetMapping("/product/reduce")
+    public Object reduce(@RequestParam("id") int id) throws Exception {
+        String connectString = "192.168.150.128:2181,192.168.150.129:2181,192.168.150.130:2181";
+
+        //1.创建curator工具对象
+        //重试策略（1000ms 试一次，最多试三次）
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+        CuratorFramework client = CuratorFrameworkFactory.newClient(connectString, retryPolicy);
+        client.start();
+
+        //2.根据客户端工具对象创建"内部互斥锁"
+        //内部创建   临时有序节点
+        InterProcessMutex lock = new InterProcessMutex(client, "/product_"+id);
+
+        //3.加锁
+        try{
+            lock.acquire();
+            //减去库存
+            productService.reduceStock(id);
+        } catch (Exception e) {
+            if(e instanceof RuntimeException){
+                throw e;
+            }
+        } finally {
+            //4.释放锁
+            lock.release();
+        }
+        return "ok";
+    }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### 启动测试
+
+1. 启动两次工程，端口号分别为8080 、 8088
+
+
+
+![image-20210301232350513](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301232350513.png)
+
+
+
+
+
+![image-20210301232406771](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301232406771.png)
+
+
+
+
+
+
+
+
+
+
+
+1. 使用nginx做负载均衡
+
+
+
+
+
+![image-20210301221825718](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301221825718.png)
+
+
+
+
+
+
+
+使用jmeter
+
+一秒发十个请求
+
+![image-20210301230535221](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301230535221.png)
+
+
+
+请求信息：
+
+![image-20210301230838559](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301230838559.png)
+
+
+
+监听：
+
+![image-20210301230854279](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301230854279.png)
+
+
+
+
+
+![image-20210301230926987](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301230926987.png)
+
+
+
+
+
+
+
+
+
+![image-20210301232436175](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301232436175.png)
+
+
+
+
+
+---
+
+
+
+结果：
+
+![image-20210301232636318](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301232636318.png)
+
+
+
+七个请求成功了：
+
+![image-20210302010510315](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210302010510315.png)
+
+
+
+...透支了。因为没有加锁
+
+
+
+
+
+甚至可能10个请求全部成功：
+
+![image-20210302011127035](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210302011127035.png)
+
+
+
+![image-20210302011142489](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210302011142489.png)
+
+
+
+
+
+
+
+
+
+### apache提供的Zookeeper客户端
+
+
+
+基于Zookeeper原生态的客户端类实现分布式是非常麻烦的，我们使用apache提供的一个Zookeeper客户端来实现
+
+
+
+http://curator.apache.org
+
+
+
+```xml
+<dependency>
+    <groupId>org.apache.curator</groupId>
+    <artifactId>curator-recipes</artifactId>
+    <version>4.2.0</version>
+</dependency>
+```
+
+
+
+recipes是curator族谱大全，里面包含Zookeeper和framework
+
+
+
+
+
+
+
+### 使用配置对象的方式创建curator客户端工具
+
+
+
+在controller**执行业务代码之前加入分布式锁的逻辑代码：**
+
+```java
+@ResponseBody
+@GetMapping("/product/reduce")
+public Object reduce(@RequestParam("id") int id) throws Exception {
+    String connectString = "192.168.150.128:2181,192.168.150.129:2181,192.168.150.130:2181";
+
+    //1.创建curator工具对象
+    //重试策略（1000ms 试一次，最多试三次）
+    RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+    CuratorFramework client = CuratorFrameworkFactory.newClient(connectString, retryPolicy);
+    client.start();
+    
+    //2.根据客户端工具对象创建"内部互斥锁"
+    //内部创建   临时有序节点
+    InterProcessMutex lock = new InterProcessMutex(client, "/product_"+id);
+
+    //3.加锁
+    try{
+        lock.acquire();
+        //减去库存
+        productService.reduceStock(id);
+    } catch (Exception e) {
+        if(e instanceof RuntimeException){
+            throw e;
+        }
+    } finally {
+        //4.释放锁
+        lock.release();
+    }
+    return "ok";
+}
+```
+
+
+
+
+
+### 使用分布式锁后再次测试：
+
+
+
+
+
+
+
+![image-20210302015818026](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210302015818026.png)
+
+
+
+每次加一，后面的监听前面的
+
+![image-20210302020213495](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210302020213495.png)
+
+
+
+可以在Zookeeper客户端中监听到：
+
+![image-20210302021215225](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210302021215225.png)
+
+
+
+**在Zookeeper`/product_1`节点下不断有新的有序节点创建并销毁**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# tips
+
+
+
+
+
+## 使用springboot启动两个不同端口的程序
+
+
+
+通过新增profile，增加一个配置文件，在执行时选择要执行的配置文件
+
+https://blog.csdn.net/m0_37564404/article/details/81512650
+
+
+
+![image-20210301232605202](../picture/Zookeeper%E8%AF%A6%E8%A7%A3/image-20210301232605202.png)
 
 
 

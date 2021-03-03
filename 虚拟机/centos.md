@@ -186,6 +186,119 @@ systemctl disable firewalld.service
 
 
 
+## 安装mysql
+
+
+
+下载并安装MySQL官方的 Yum Repository,Mysql版本8.0.20
+
+```
+wget -i -c ``http://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm
+```
+
+下载后直接yum安装
+
+```
+yum -y install mysql80-community-release-el7-3.noarch.rpm
+```
+
+安装MySQL服务器
+
+```
+yum -y install mysql-community-server
+```
+
+
+
+安装完成后就会覆盖掉之前的mariadb
+
+![image-20210301181401804](../picture/centos/image-20210301181401804.png)
+
+
+
+启动MySQL
+
+```
+systemctl start mysqld.service
+```
+
+查看MySQL运行状态
+
+```
+systemctl status mysqld.service
+```
+
+
+
+
+
+
+
+找出root初始密码
+
+```
+grep "password"/var/log/mysqld.log
+```
+
+`S/u>j*3JV4h!`
+
+
+
+进入数据库：
+
+```
+mysql -uroot -p
+```
+
+输入密码（密码是上面查询到的 ,/wsw6gif;eH ），此时不能操作数据库，必须修改密码之后才能操作数据库
+
+```
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'new password';
+```
+
+其中‘new password'替换成你要设置的密码，注意:密码设置必须要大小写字母数字和特殊符号（,/';:等）,不然不能配置成功
+
+
+
+
+
+--
+
+
+
+**开启mysql的远程访问**
+
+
+
+执行以下命令开启远程访问限制（注意：下面命令开启的IP是 192.168.0.1，如要开启所有的，用%代替IP）,mysql8.0和以前的版本不一样，不能用原来的命令同时授权和创建用户：
+
+```mysql
+create user 'root'@'%' identified by 'Hcr123..';
+grant all privileges on *.* to 'root'@'%' with grant option;
+```
+
+再输入以下两行命令
+
+```mysql
+flush privileges;
+```
+
+
+
+----
+
+
+
+**Public Key Retrieval is not allowed**
+
+
+
+
+
+https://blog.csdn.net/u013360850/article/details/80373604
+
+在连接后面添加 `allowPublicKeyRetrieval=true`
+
 
 
 

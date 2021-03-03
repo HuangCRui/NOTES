@@ -109,9 +109,9 @@ Nginx在Linux下安装，只提供了源代码，所以需要进行编译
      # --prefix=/usr/local/nginx  是 nginx 编译安装的目录（推荐），安装完后会在此目录下生成相关文件
    ```
 
-5. 输入   make     进行编译
+5. 执行  `make`     进行编译
 
-6. make install    安装
+6. `make install`    安装
 
 
 

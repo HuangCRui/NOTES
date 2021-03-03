@@ -214,7 +214,7 @@ SpringBoot + SpringCloud
 
 
 
-## 云与安生
+## 云与原生
 
 
 
@@ -898,7 +898,7 @@ public class getProperties {
 
 
 
-### @ConfigurationProperties
+### @ConfigurationProperties + @Component
 
 
 
