@@ -11408,6 +11408,23 @@ public Map carsSell(@MatrixVariable("low") Integer low,
 
 
 
+## Springboot整合Mybatis扫不到mapper接口
+
+
+
+如果springboot的主程序main和mapper接口的目录不在同一个目录下，即以下情况：
+
+不仅需要使用@ComponentScan扫描组件注解（**这里扫的是spring注解**），还需要使用@MapperScan来扫描**mybatis的注解**
+
+![image-20210304150232193](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210304150232193.png)
+
+
+
+```java
+@MapperScan(basePackages = {"com.example.mapper"})
+@ComponentScan(basePackages = {"com.example.*"})
+```
+
 
 
 

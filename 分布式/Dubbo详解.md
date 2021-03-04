@@ -854,7 +854,7 @@ public String sayNo() throws InterruptedException {
 
 
 
-直接autowired注入就行
+直接@autowired注入就行
 
 ```java
 //不能自动注入autowired
@@ -884,6 +884,494 @@ public String sayNo(){
 
 
 ![image-20210303205056789](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210303205056789.png)
+
+
+
+
+
+
+
+### 4.1.4 多版本
+
+
+
+- 一个借口，多个（版本的）实现类，可以使用定义版本的方式引入
+- 为HelloService接口定义两个实现类，提供者修改配置
+
+
+
+服务接口的**实现类**中设置**版本号**，如果是xml配置文件方式需要指明实现类
+
+![image-20210304100314127](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304100314127.png)
+
+```java
+@Service(version = "1.0.0")
+public class HelloServiceImpl implements HelloService {
+    @Override
+    public String sayHello(String name) throws InterruptedException {
+        System.out.println("-------------------调用一次-------------------");
+//        Thread.sleep(3000);
+        return "hello "+name+"!!!====v1.0.0====";
+    }
+```
+
+
+
+consumer中选择版本号进行调用：
+
+(可以将版本号改为“*” -> 表示随机调用)
+
+```java
+<!--    相当于@Reference 来注入到容器中-->
+    <dubbo:reference interface="com.example.service.HelloService" id="helloService" version="2.0.0">
+        <dubbo:method name="sayHello" retries="3"/>
+        <dubbo:method name="sayNo" retries="0"/>
+    </dubbo:reference>
+```
+
+![image-20210304095858290](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304095858290.png)
+
+
+
+
+
+
+
+
+
+### 4.1.5 本地存根
+
+
+
+- 目前我们的分布式架构搭建起来有一个严重的问题，就是好所有的操作全都是 **消费者发起，由服务提供者执行**
+- 消费者什么也不干，只管调用；而服务提供者很累。。例如简单的参数验证，消费者完全能够胜任，把合法的参数再发送给提供者执行，效率高了，提供者也没那么累了
+- 例如：去房产局办理房屋过户，带好自己的证件和资料，如果什么都不带，那么办理过户的手续会很麻烦，需要先调查你有什么贷款、有没有抵押、复印资料等操作。如果都准备好，很快就可以办完
+- **先在消费者处理一些业务逻辑，再调用提供者的过程，就是本地存根**
+- 在消费者中，创建一个HElloServiceStub类并实现HelloService接口
+
+
+
+
+
+- **注意：必须使用构造方法的方式注入**
+
+
+
+```xml
+<!--    相当于@Reference 来注入到容器中-->
+    <dubbo:reference interface="com.example.service.HelloService" id="helloService" version="2.0.0" stub="com.example.stub.HelloServiceStub">
+    </dubbo:reference>
+```
+
+
+
+```java
+public class HelloServiceStub implements HelloService {
+    //本地存根必须以构造方法的方式注入
+    private HelloService helloService;//HelloService的代理对象
+
+    //从容器中获得参数
+    public HelloServiceStub(HelloService helloService) {
+        this.helloService = helloService;
+    }
+
+
+    @Override
+    public String sayHello(String name) {
+        if(StringUtils.hasLength(name)){
+            return helloService.sayHello(name);
+        }
+        return "I'm sorry!";
+    }
+
+    @Override
+    public String sayNo() {
+        return helloService.sayNo();
+    }
+}
+```
+
+
+
+
+
+测试：
+
+![image-20210304102615184](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304102615184.png)
+
+成功在消费者方预处理数据。
+
+
+
+
+
+
+
+
+
+
+
+## 4.2 负载均衡策略
+
+
+
+- 负载均衡 Load Balance，其实就是将请求分摊到多个操作单元上进行执行，从而共同完成工作任务
+- 简单地说，好多台服务器，不能总是让一台服务器干活，应该“雨露均沾”
+- dubbo一共提供4‘种策略，缺省为random随机分配调用
+
+
+
+![image-20210304103137112](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304103137112.png)
+
+
+
+
+
+- **随机**，按权重设置随机概率。
+- 在一个截面上碰撞的概率高，但调用量越大分布越均匀，而且按概率使用权重后也比较均匀，有利于动态调整提供者权重。
+
+---
+
+- **轮询**，按公约后的**权重**设置**轮询比率。**
+- 存在**慢的提供者累积请求**的问题，比如：第二台机器很慢，但没挂，当请求调到第二台时就卡在那，久而久之，**所有请求都卡在调到第二台上**。
+
+---
+
+- **最少活跃调用数**，相同活跃数的随机，活跃数指调用前后计数差。
+- 使**慢的提供者收到更少请求**，因为越慢的提供者的调用前后**计数差会越大，时间长**。
+
+---
+
+- **一致性 Hash**，相同参数的请求总是发到同一提供者。
+- 当某一台提供者挂时，原本发往该提供者的请求，基于虚拟节点，**平摊到其它提供者，不会引起剧烈变动。**
+- 算法参见：http://en.wikipedia.org/wiki/Consistent_hashing
+- 缺省只对第一个参数 Hash，如果要修改，请配置 `<dubbo:parameter key="hash.arguments" value="0,1" />`
+- 缺省用 160 份虚拟节点，如果要修改，请配置 `<dubbo:parameter key="hash.nodes" value="320" /`
+
+
+
+能够尽可能小地改变已存在的服务请求与处理请求服务器之间的映射关系
+
+
+
+
+
+
+
+---
+
+
+
+修改提供者配置并启动3个提供者，让消费者对其进行访问
+
+
+
+- tomcat端口8001,8002,8003
+- provider端口 20881,20882,20883
+
+```xml
+<dubbo:provider timeout="2000" port="20881"/>
+```
+
+修改springboot配置，打成3个jar包：
+
+![image-20210304110146387](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304110146387.png)
+
+在控制台运行：
+
+**可以在dubbo-管理中看到一个服务HelloService’具有三个提供者，也就是三台服务器提供同一个服务**
+
+![image-20210304110138304](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304110138304.png)
+
+
+
+
+
+默认基本能做到负载均衡：
+
+![image-20210304110954021](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304110954021.png)
+
+
+
+
+
+
+
+
+
+---
+
+轮询：
+
+```
+<dubbo:reference loadbalance="roundrobin" interface="com.example.service.HelloService" id="helloService" version="2.0.0" stub="com.example.stub.HelloServiceStub">
+```
+
+按照1-2-3的顺序来访问
+
+
+
+---
+
+
+
+权重：(**记得关闭轮询策略**)
+
+**在控制台进行权重分配：**
+
+![image-20210304112218285](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304112218285.png)
+
+改变权重：
+
+![image-20210304112255492](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304112255492.png)
+
+
+
+测试成功。
+
+
+
+
+
+
+
+## 4.3 高可用
+
+
+
+
+
+### 4.3.1 zookeeper宕机
+
+
+
+zookeeper注册中心宕机，还可以消费dubbo暴露的服务
+
+- 监控中心宕掉不影响使用，只是丢失部分采样数据
+- 数据库宕掉后，注册中心仍能通过缓存**提供服务列表查询**，**但不能注册-新-服务**
+- 注册中心对等集群，任意一台宕掉后，将自动切换到另一台（zookeeper集群，宕掉半数前都可运行）
+- **注册中心全部宕掉后，服务提供者和服务消费者仍能通过==本地缓存==通讯**
+- 服务提供者无状态，任意一台宕掉后，不影响使用
+- 服务提供者**全部宕掉**后，服务消费者应用**将无法使用**，并无限次重连等待服务提供者恢复
+
+
+
+---
+
+在服务端暴露一个**ip+端口**给消费者来调用，而zookeeper集群正是用来保存这些地址的。
+
+如果zookeeper宕掉，可以通过缓存查询。**只是不能重新注册新服务了(没有注册中心了)**
+
+如果服务端也宕掉了，那么就相当于只有地址，但这个地址没有任何服务，无法访问到服务。**只好重连等待**
+
+![image-20210304115106482](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304115106482.png)
+
+
+
+---
+
+测试：
+
+- 正常发出请求
+
+- 关闭zookeeper： `./zkServer.sh stop`
+
+  ![image-20210304115403362](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304115403362.png)
+
+- 消费者仍然可以正常消费
+
+![image-20210304115411912](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304115411912.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 4.4 服务降级
+
+
+
+- 庇护遇到危险会自己脱落尾巴，目的是丧尸不重要的东西，保住重要的
+- 服务降级，就是**根据实际的情况和流量**，对一些服务有策略的**停止**或换种**简单**的方式处理，从而**释放服务器的资源来保证核心业务的正常运行**
+
+
+
+
+
+### 4.4.1 为什么要服务降级
+
+
+
+为什么要使用服务降级，这是防止分布式服务发生 **雪崩效应**
+
+- 雪崩：就是蝴蝶效应，当一个请求发生超时，一直等待着服务响应，那么在高并发情况下，很多请求都是因为这样**一直等着响应**，直到**服务资源耗尽-产生宕机**，而宕机之后导致分布式其他服务**调用该宕机的服务**也会出现资源耗尽**宕机**，这样下去将导致**整个分布式服务都瘫痪**，这就是"雪崩"
+
+
+
+- 舍弃没用的服务，来换取其他更重要服务的正常/平稳执行
+
+
+
+
+
+### 4.4.2 服务降级实现方式
+
+
+
+- 第一种，在 **管理控制台配置服务降级：屏蔽和容错**
+
+  - **屏蔽：**（force）表示**消费方**对该服务的方法调用都 直接返回null值，**不发起远程调用**。用来**屏蔽不重要的服务不可用时**对**调用方**的影响
+
+  
+
+  - **容错：**（fail）表示消费方对该服务的方法调用在 **失败后，再返回null值，**不抛异常，用来容忍不重要服务不稳定时对调用方的影响
+
+
+
+**在消费者端进行屏蔽，直接返回null**
+
+![image-20210304122534772](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304122534772.png)
+
+
+
+容错：
+
+![image-20210304122838518](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304122838518.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
