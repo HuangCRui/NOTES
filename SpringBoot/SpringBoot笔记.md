@@ -9192,6 +9192,7 @@ redis:
 ```java
 @Autowired
 StringRedisTemplate stringRedisTemplate;
+
 @Test
 public void testRedis(){
     ValueOperations<String, String> operations = stringRedisTemplate.opsForValue();
