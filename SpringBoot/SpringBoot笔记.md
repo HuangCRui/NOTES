@@ -6467,7 +6467,7 @@ public StandardServletMultipartResolver multipartResolver() {
 
 
 
-属性都在配置类： `MultipartProperties`中
+属性都在属性类： `MultipartProperties`中
 
 ----
 

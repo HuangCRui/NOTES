@@ -1480,7 +1480,7 @@ public class ProductAction {
     @ResponseBody
     @GetMapping("/product/reduce")
     public Object reduce(@RequestParam("id") int id) throws Exception {
-        String connectString = "192.168.150.128:2181,192.168.150.129:2181,192.168.150.130:2181";
+        String connectString = "192.168.150.128:2181,192.168.150.129:2181,192.168.150.130:2181";//zookeeper集群
 
         //1.创建curator工具对象
         //重试策略（1000ms 试一次，最多试三次）
