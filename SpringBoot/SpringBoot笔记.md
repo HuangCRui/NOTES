@@ -1324,7 +1324,7 @@ YAML 是 "YAML Ain't Markup Language"（YAML 不是一种标记语言）的递�
 
 
 
-`key: value`；kv之间有空格
+> **`key: value`；kv之间有空格**
 
 大小写敏感
 
@@ -1355,7 +1355,7 @@ k: v
 - 对象：键值对的集合。map、hash、set、object 
 
 ```
-行内写法：  k: {k1:v1,k2:v2,k3:v3}
+行内写法：  k: {k1: v1,k2: v2,k3: v3}
 #或
 k: 
   k1: v1
