@@ -2921,6 +2921,1627 @@ SpringCloud GateWay是 **异步非阻塞**
 
 
 
+### 4.5.4 GateWay应用
+
+使用网关对静态化微服务进行代理（添加在他的上游，相当于隐藏了具体微服务的信息，对外暴露的是网关）
+
+
+
+- 创建工程product-cloud-gateway-server,尽量和原有微服务进行独立，但maven会报错，那么就排除对spring-boot-starter-web的依赖！
+
+```xml
+    <parent>
+        <artifactId>product-parent</artifactId>
+        <groupId>com.hcr</groupId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-commons</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+    </dependencies>
+
+  
+```
+
+
+
+- gateway配置文件
+
+```yaml
+server:
+  port: 9300
+
+eureka:
+  client: #eureka server本身也是一个client,因为在集群下需要与其他Eureka Server进行数据的同步
+    service-url:
+      defaultZone: http://ProductCloudEurekaServerB:8081/eureka, http://ProductCloudEurekaServerA:8080/eureka #需要定义eureka server url  这里需要一个map类型
+  instance:
+    prefer-ip-address: true #使用ip注册，新版本都使用ip
+    instance-id: ${spring.cloud.client.ip-address}:${spring.application.name}:${server.port}:@project.version@
+    #自定义实例信息 默认显示前面的那些
+
+spring:
+  application:
+    name: product-cloud-gateway
+  #网关的配置
+  cloud:
+    gateway:
+      #配置路由
+      routes:
+        - id: service-page-router
+          uri: http://127.0.0.1:9001
+          predicates:
+            - Path=/page/**
+        - id: service-product-router
+          uri: http://127.0.0.1:9000
+          predicates:
+            - Path=/product/**
+```
+
+
+
+- 启动类，开启Eureka Client
+
+```java
+@SpringBootApplication
+@EnableDiscoveryClient
+public class GateWayServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(GateWayServerApplication.class, args);
+    }
+}
+```
+
+
+
+![image-20210313110126331](../picture/SpringCloud/image-20210313110126331.png)
+
+
+
+![image-20210313110425580](../picture/SpringCloud/image-20210313110425580.png)
+
+
+
+**一定要和配置文件中配置的前缀路径相等**
+
+这里的page和product既作为断言，也是请求的一部分，如果请求的url以/page开头，那么就转发向 `http://127.0.0.1:9001/page/...`，在页面静态化微服务中一定也要以/page/开头
+
+![image-20210313111104313](../picture/SpringCloud/image-20210313111104313.png)
+
+有时候不一定能匹配上！
+
+**当断言成功后，交给某个微服务处理时，使用的是"转发"！**
+
+
+
+
+
+#### 解决前缀问题
+
+```yaml
+- id: service-product2-router
+  uri: http://127.0.0.1:8999
+  predicates:
+    - Path=/product2/**
+  filters:
+    # 将具体请求中的第一段移除出去
+    # http://127.0.0.1:9300/product2/port -> http://127.0.0.1:8999/port --> 商品微服务端口
+    - StripPrefix=1
+```
+
+
+
+**访问请求中加上product2是为了满足断言，**
+
+**而断言成功后需要交给具体的uri所对应的微服务处理，将uri中的第一个参数去掉，即去掉product2，只取/product2后的地址映射名**
+
+![image-20210313111839124](../picture/SpringCloud/image-20210313111839124.png)
+
+**每一个Controller都对应一个uri，如果不做过滤，就无法访问不同controller映射前缀中的方法**
+
+
+
+
+
+
+
+
+
+### 4.5.5 GateWay路由规则详解
+
+
+
+
+
+
+
+![image-20210313115143202](../picture/SpringCloud/image-20210313115143202.png)
+
+
+
+
+
+![image-20210313115653137](../picture/SpringCloud/image-20210313115653137.png)
+
+![image-20210313115746197](../picture/SpringCloud/image-20210313115746197.png)
+
+![image-20210313115812701](../picture/SpringCloud/image-20210313115812701.png)
+
+![image-20210313115858637](../picture/SpringCloud/image-20210313115858637.png)
+
+
+
+![image-20210313115946920](../picture/SpringCloud/image-20210313115946920.png)
+
+![image-20210313115959478](../picture/SpringCloud/image-20210313115959478.png)
+
+
+
+
+
+
+
+### 4.5.6 GateWay动态路由详解
+
+
+
+GateWay吃自动从注册中心获取服务列表并访问，即所谓的动态路由
+
+步骤如下：
+
+1. pom.xml中添加注册中心Eureka-Client
+
+
+
+
+
+
+
+```yaml
+spring:
+  application:
+    name: product-cloud-gateway
+  #网关的配置
+  cloud:
+    gateway:
+      #配置路由
+      routes:
+        - id: service-page-router
+          uri: lb://product-service-page
+          predicates:
+            - Path=/page/**
+        - id: service-product-router
+          # 动态路由，从注册中心获取对应服务的实例
+          uri: lb://product-service-product
+          predicates:
+            - Path=/product/**
+          filters:
+            - StripPrefix=1
+```
+
+lb：loadbalancer，实现了负载均衡。
+
+![image-20210313133009619](../picture/SpringCloud/image-20210313133009619.png)
+
+**动态路由设置时，url以 `lb:`开头，代表从注册中心获取服务，后面是注册中心的服务名称**
+
+
+
+
+
+
+
+
+
+### 4.5.7 GateWay过滤器
+
+
+
+#### 过滤器简介
+
+
+
+- 生命周期的角度来说，主要有两个：pre和post
+
+![image-20210313133258139](../picture/SpringCloud/image-20210313133258139.png)
+
+
+
+- 从过滤器类型的角度，SpringCloud GateWay的过滤器分为GateWayFilter和GlobalFilter
+
+
+
+![image-20210313133452317](../picture/SpringCloud/image-20210313133452317.png)
+
+如GateWay Filter可以去掉url中的占位后，再转发路由，比如：
+
+![image-20210313133558970](../picture/SpringCloud/image-20210313133558970.png)
+
+
+
+
+
+
+
+
+
+#### 自定义全局过滤器实现IP访问限制(黑白名单)
+
+**Global Filter全局过滤器是使用比较多的过滤器**
+
+
+
+请求过来时，判断发送请求的客户端的ip，如果在黑名单中，拒绝访问
+
+自定义GateWay全局过滤器时，实现GlobalFilter接口，通过全局过滤器可以实现黑白名单、限流等功能
+
+
+
+
+
+
+
+```java
+/**
+ * 通常情况下，在进行网关自定过滤器时，要实现两个接口，GlobalFilter，
+ * Ordered：指定过滤器执行的顺序
+ */
+@Component
+public class BlackListFilter implements GlobalFilter, Ordered {
+
+    //加载黑名单列表 MYSQL-> Redis -> 内存
+    private  static List<String> blackList = new ArrayList<>();
+    static {
+        blackList.add("127.0.0.1");//将本机地址加入黑名单中
+    }
+
+    /**
+     * 过滤器的核心逻辑
+     * exchange:封装了request和response上下文
+     * chain：网关过滤器链
+     */
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        //获得请求和响应对象
+        ServerHttpRequest request = exchange.getRequest();
+        ServerHttpResponse response = exchange.getResponse();
+        //获取来访者的IP地址
+        String clientip = request.getRemoteAddress().getHostString();
+        //判断是否在黑名单中
+        if(blackList.contains(clientip)){
+            //拒绝访问
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);//未授权
+            String data = "request be denied";
+            DataBuffer wrap = response.bufferFactory().wrap(data.getBytes());
+            return response.writeWith(Mono.just(wrap));
+        }
+        return chain.filter(exchange);
+    }
+
+    /**
+     * 定义过滤的顺序，getOrder()返回值的大小决定了过滤器执行的优先级，越小优先级越高
+     * @return
+     */
+    @Override
+    public int getOrder() {
+        return 0;
+    }
+}
+```
+
+
+
+
+
+![image-20210313135628300](../picture/SpringCloud/image-20210313135628300.png)
+
+
+
+
+
+
+
+### 4.5.8 GateWay高可用
+
+
+
+网关作为 **非常核心的一个部件**，如果挂掉，那么所有请求都可能无法路由处理，因此我们需要做GateWay的高可用
+
+**GateWay的高可用很简单：启动多个GateWay实例来实现高可用，在GateWay的上游使用Nginx等负载均衡设备进行负载转发以达到高可用的目的**
+
+对这些GateWay集群设置不同端口。
+
+Nginx.conf：
+
+```nginx
+upstream gateway{
+	server 127.0.0.1:9300
+	server 127.0.0.1:9301
+}
+location / {
+	proxy_pass http://gateway; #转发到gateway中的GateWay集群的url地址进行负载均衡
+}
+```
+
+
+
+
+
+
+
+
+
+## 4.6 SpringCloud Config 分布式配置中心
+
+
+
+
+
+### 4.6.1 分布式配置中心应用场景
+
+往往，我么使用配置文件管理一些配置信息，如：application.yaml
+
+**单体应用架构**，配置信息的管理、维护并不是特别麻烦，手动操作就可以
+
+**微服务架构**，因为我们的分布式集群环境中可能有很多个微服务，我们不可能一个一个去修改配置然后重启生效，需要在运行期间动态调整配置信息，如：根据各个微服务的负载情况，动态调整数据源连接池的大小，我们希望配置内容发生变化的时候，微服务可以自动更新
+
+- 集中配置管理，一个微服务架构中可能有成百上千个微服务，所以集中配置管理是很重要的，(一次修改，到处生效)
+- 不同环境不同配置，比如数据源配置在不同环境（开发dev，测试test，生产prod）中是不同的
+- 运行期间可动态调整，例如：可根据各个微服务的**负载情况**，**动态调整数据源连接池大小**等配置修改后可自动更新
+- 如果配置内容发生变化，微服务可以自动更新配置
+
+需要对配置文件进行 **集中式管理**，这也是分布式配置中心的作用
+
+
+
+
+
+
+
+### 4.6.2 SpringCloud Config
+
+
+
+
+
+#### config简介
+
+SpringCloud Config是一个分布式配置管理方案，包含了Server端和Client端两个部分
+
+
+
+![image-20210313141803745](../picture/SpringCloud/image-20210313141803745.png)
+
+- 。Config Server是一个微服务，需要手动搭建，可以托管到github中。提供配置文件的存储，以接口的形式将配置文件的内容提供出去，通过使用@EnableConfigServer注解在SpringBoot应用中非常简单的嵌入
+- 每个微服务都是Config Client。通过接口获取配置数据并初始化自己的应用
+
+
+
+#### Config分布式配置应用
+
+默认使用Git存储配置文件内容，也可以SVN
+
+比如我们要对“静态化微服务或者商品微服务”的application.yaml进行管理（区分开发化境、测试环境、生产环境）
+
+
+
+1. 创建github/gitee项目 product-config
+
+2. 上传yaml配置文件，命名规则：profile指的是环境（用于区分开发化境、测试环境、生产环境）
+
+   如：product-service-page-dev.yaml
+
+   
+
+   ![image-20210313155227533](../picture/SpringCloud/image-20210313155227533.png)
+
+   ![image-20210313144232012](../picture/SpringCloud/image-20210313144232012.png)
+
+3. 构建Config Server统一配置中心  product-cloud-config
+
+
+
+- 依赖：
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-config-server</artifactId>
+    </dependency>
+</dependencies>
+```
+
+- 启动类： 
+
+```java
+@SpringBootApplication
+@EnableDiscoveryClient
+@EnableConfigServer //开启配置服务器功能
+public class ConfigServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServerApplication.class, args);
+    }
+}
+```
+
+- 配置文件---使用gitee仓库保存配置文件
+
+```yam
+server:
+  port: 9400
+
+eureka:
+  client: #eureka server本身也是一个client,因为在集群下需要与其他Eureka Server进行数据的同步
+    service-url:
+      defaultZone: http://ProductCloudEurekaServerB:8081/eureka, http://ProductCloudEurekaServerA:8080/eureka #需要定义eureka server url  这里需要一个map类型
+  instance:
+    prefer-ip-address: true #使用ip注册，新版本都使用ip
+    instance-id: ${spring.cloud.client.ip-address}:${spring.application.name}:${server.port}:@project.version@
+spring:
+  application:
+    name: product-cloud-config
+  cloud:
+    config:
+      server:
+        # git配置
+        git:
+          uri: https://gitee.com/Cuaaa/product-config.git #配置git地址
+          username:  1587723729@qq.com
+          password: huangchenrui20..
+          search-paths:
+            - product-config
+      label: master #分支
+```
+
+
+
+
+
+![image-20210313155328911](../picture/SpringCloud/image-20210313155328911.png)
+
+
+
+http://127.0.0.1:9400/master/product-service-page-dev.yaml
+
+`master`：分支名称
+
+`product-service-page-dev.yaml`：文件名
+
+
+
+
+
+#### 构建Client客户端
+
+在页面静态化微服务中：
+
+添加依赖
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-config-client</artifactId>
+</dependency>
+```
+
+
+
+![image-20210313155927174](../picture/SpringCloud/image-20210313155927174.png)
+
+
+
+改名为bootstrap.yaml
+
+```yaml
+cloud:
+  config:  #针对config分布式配置中心的配置 config server
+    name: product-service-page # product-service-page-dev.yaml 不写后缀！
+    profile: dev  # 环境
+    label: master # 分支名称
+    uri: http://127.0.0.1:9400 # config server的地址
+```
+
+**文件名不写后缀！！！！！！直接写去除名字就行！**
+
+
+
+```java
+@RestController
+@RequestMapping("/config")
+public class ConfigClientController {
+    @Value("${person.name}")
+    private String name;
+    @Value("${mysql.user}")
+    private String user;
+
+    @GetMapping("/query")
+    private String getConfigInfo(){
+        return user + "," + name;
+    }
+}
+```
+
+
+
+启动的时候就已经读取到了配置中心的配置
+
+![image-20210313161527475](../picture/SpringCloud/image-20210313161527475.png)
+
+![image-20210313161343759](../picture/SpringCloud/image-20210313161343759.png)
+
+
+
+
+
+### 4.6.3 Config配置手动刷新
+
+
+
+不用重启微服务，只需要手动的做一些其他的操作（访问一个地址/refresh）刷新，之后再访问即可
+
+此时，客户端取到了配置中心的值，但当我们修改gitee上的值时在**服务端可以实时的获取到最新的值**，但**客户端暂时还不能拿到最新的数据**。**缓存机制！！**读取到的数据都是在启动那一刻加载到的数据
+
+SpringCloud为我们解决了这个问题，就是客户端使用post去触发refresh，获取最新数据
+
+1. Client客户端添加依赖springboot-starter-actuator
+2. Client客户端bootstrap.yaml中添加配置（暴露通信端点）
+
+
+
+```yaml
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "*" #默认为 health和info  添加refresh功能或者暴露所有的端口
+```
+
+
+
+3. 使用到配置信息的类上添加 `@RefreshScope`注解
+
+```java
+@RestController
+@RequestMapping("/config")
+@RefreshScope
+public class ConfigClientController {
+    @Value("${person.name}")
+    private String name;
+    @Value("${mysql.user}")
+    private String user;
+
+    @GetMapping("/query")
+    private String getConfigInfo(){
+        return user + "," + name;
+    }
+}
+```
+
+
+
+
+
+4. 手动向client客户端发出**post请求**
+
+http://127.0.0.1:9001/actuator/refresh
+
+表示此次刷新了person.name中的数据,mysql.user没有改变
+
+![image-20210313165439704](../picture/SpringCloud/image-20210313165439704.png)
+
+随后可以获得到最新数据！
+
+
+
+
+
+**注意：手动刷新方式避免了服务重启**
+
+可否使用广播机制，一次通知，处处生效，方便**大范围配置刷新**？
+
+（当前只是通过refresh来刷新**当前微服务的配置** http://127.0.0.1:9001/actuator/refresh，而不能一次性刷新所有微服务的配置）
+
+
+
+### 4.6.4 Config配置自动更新
+
+
+
+实现一次通知，处处生效
+
+在微服务架构中，我们可以结合消息总线 Bus实现分布式配置的自动更新
+
+
+
+
+
+#### 消息总线Bus
+
+即我们经常会使用MQ消息代理构建一个共用的**Topic**，通过这个Topic**连接各个微服务实例**，**MQ广播的消息**会**被所有在注册中心的微服务实例监听和消费**，换言之就是**通过一个主题连接各个微服务，打通脉络**
+
+SpringCloud Bus(是**基于MQ**的，支持RabbitMQ/Kafka)是SpringCloud中的消息总线方案，SpringCloud Config + SpringCloud + SpringCloud Bus 结合可以**实现配置信息的自动更新。**
+
+
+
+
+
+![image-20210313173718040](../picture/SpringCloud/image-20210313173718040.png)
+
+
+
+#### 实现自动更新
+
+
+
+MQ消息代理，我们选择使用RabbitMQ，configServer和ConfigClient都添加消息总线的支持以及RabbitMQ的连接信息
+
+1. 服务端和客户端都引入二合一的依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-bus-amqp</artifactId>
+</dependency>
+```
+
+
+
+2. **Config Server和客户端都**添加RabbitMQ配置
+
+**启动RabbitMQ集群.....试一试**
+
+![image-20210313174948498](../picture/SpringCloud/image-20210313174948498.png)
+
+
+
+```yaml
+spring：
+    rabbitmq:
+      host: 192.168.150.128
+      port: 5672
+      username: hcr
+      password: 123456
+```
+
+3. 暴露**服务端(不是客户端！)的actuator**端口 
+
+```yaml
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "*" #默认为 health和info  添加refresh功能或者暴露所有的端口 ,暴露bus-refresh
+```
+
+
+
+4. 重启微服务
+
+
+
+这时候在RabbitMQ中可以看到SpringBus的路由和消息队列：
+
+![image-20210313175650296](../picture/SpringCloud/image-20210313175650296.png)
+
+
+
+![image-20210313175705356](../picture/SpringCloud/image-20210313175705356.png)
+
+
+
+
+
+5. 修改配置中心的配置文件
+
+
+
+这时可以直接在配置中心得到更新后的配置：
+
+![image-20210313180052897](../picture/SpringCloud/image-20210313180052897.png)
+
+但客户端没有更新：
+
+![image-20210313180157823](../picture/SpringCloud/image-20210313180157823.png)
+
+
+
+6. 向配置中心服务端发送post请求，各个客户端即可自动刷新
+
+http://127.0.0.1:9400/actuator/bus-refresh
+
+![image-20210313180600327](../picture/SpringCloud/image-20210313180600327.png)
+
+客户端得到了更新后的请求：
+
+![image-20210313180620867](../picture/SpringCloud/image-20210313180620867.png)
+
+
+
+
+
+# 5. 第二代SpringCloud核心组件 (SCA)
+
+
+
+和SpringCloud一样，SpringCloud Alibaba也是一套微服务解决方案，包含开发分布式应用微服务的必需组件，方便开发者通过SpringCloud编程模型轻松使用这些组件来开发分布式应用服务，只需要添加一些注解和少量配置，就可以将SpringCloud应用接入阿里微服务解决方案，通过阿里中间件来迅速搭建分布式应用系统
+
+
+
+![image-20210313182437384](../picture/SpringCloud/image-20210313182437384.png)
+
+
+
+![image-20210313182532668](../picture/SpringCloud/image-20210313182532668.png)
+
+
+
+![image-20210313182938833](../picture/SpringCloud/image-20210313182938833.png)
+
+
+
+![image-20210313183030880](../picture/SpringCloud/image-20210313183030880.png)
+
+
+
+
+
+
+
+## 5.1 Nacos服务注册和配置中心
+
+
+
+### 5.1.1 Nacos介绍
+
+Dynamic Naming and Configuration Service，是阿里巴巴开源的一个针对微服务架构中服务发现、配置管理和服务管理平台
+
+Nacos = Eureka + Config + Bus。
+
+**下载本地的包，跑起来作为一个项目，不需要自己搭建**
+
+
+
+**Nacos功能特性：**
+
+- 服务发现与健康检查
+- 动态配置管理
+- 动态DNS服务
+- 服务和元数据管理（也有一个ui页面），动态的服务权重调整、动态服务优雅下线，
+
+
+
+
+
+
+
+### 5.1.2 Nacos单例服务部署
+
+
+
+下载zip包并解压。
+
+![image-20210313184207514](../picture/SpringCloud/image-20210313184207514.png)
+
+windows环境下使用startup.cmd来启动。
+
+
+
+```
+unix:startup.sh -m standalone
+windows:cmd startup.cmd
+```
+
+
+
+> windows下可能需要修改startup.cmd文件中的配置，将默认的集群cluster启动改为单例standalone
+
+
+
+- 访问Nacos控制台
+
+http://127.0.0.1:8848/nacos/index.html#/login
+
+默认用户名和密码：nacos,nacos
+
+![image-20210313185859099](../picture/SpringCloud/image-20210313185859099.png)
+
+
+
+
+
+### 5.1.3 微服务注册到Nacos
+
+在父工程pom中引入SCA依赖
+
+```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-dependencies</artifactId>
+            <version>Greenwich.RELEASE</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+            <version>2.1.0.RELEASE</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+
+
+在微服务中引入nacos客户端依赖来注册到nacos注册中心，**必须剔除eureka-client依赖**
+
+```xml
+<!--        <dependency>-->
+<!--            <groupId>org.springframework.cloud</groupId>-->
+<!--            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>-->
+<!--        </dependency>-->
+
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+```
+
+
+
+- application.yaml修改，添加nacos配置信息，**别忘了删去注册到Eureka中和调用config的配置**
+
+```yaml
+spring:
+    cloud:
+      nacos:
+        discovery:
+          server-addr: 127.0.0.1:8848
+```
+
+
+
+
+
+服务已经注册到了nacos注册中心中！
+
+![image-20210313192613071](../picture/SpringCloud/image-20210313192613071.png)
+
+
+
+**不需要我们手动搭建注册中心项目！**
+
+
+
+
+
+### 5.1.4 服务列表解析
+
+
+
+
+
+![image-20210313193157535](../picture/SpringCloud/image-20210313193157535.png)
+
+- 触发保护阈值：true表示已经触发保护阈值 
+- 实例数：单个服务的集群下有多少个实例
+
+可以创建服务，但创建出的是空服务。
+
+----
+
+可以修改集群和每个服务实例的属性（权重/阈值/...）
+
+可以将不需要的服务实例下线，不再进行服务的处理，但项目还在运行中
+
+![image-20210313193616041](../picture/SpringCloud/image-20210313193616041.png)
+
+
+
+#### 阈值
+
+
+
+nacos是服务注册中心，消费者从nacos中获取服务实例
+
+假如当前有100台商品微服务(集群)，有90台处于不健康状态，正好碰上高并发大流量，剩下10台健康的进行处理。？nonono，扛不住啊，说不定还会触发雪崩。。
+
+**保护阈值：当微服务集群中有一半都处于不健康状态->true，只要有请求过来，健康和不健康的都参与处理请求。牺牲了一些请求，总比造成雪崩要强**
+
+并且这个参数可以**动态调整**，**立即生效！**
+
+
+
+
+
+
+
+### 5.1.5 负载均衡
+
+Nacos客户端引入的时候，会引入ribbon的依赖包，我们使用OpenFeign的时候也会引入ribbon的依赖。ribbon包括Hystrix都按照原来方式进行配置即可。
+
+使用商品微服务集群来测试负载均衡
+
+
+
+![image-20210314095103489](../picture/SpringCloud/image-20210314095103489.png)
+
+
+
+在将服务注册到Nacos后，通过以前的RestTemplate访问：`http://product-service-product/port`，**已经实现了负载均衡**
+
+![image-20210314095741946](../picture/SpringCloud/image-20210314095741946.png)
+
+
+
+> 需要说明一下：
+>
+> Nacos自带ribbon负载均衡，并且通过OpenFeign远程调用微服务的时候，因为OpenFeign配置了fallback和熔断机制，配置如下：原先配置的Hystrix可以生效，并且ribbon配置也会生效
+
+```yaml
+hystrix:
+  command:
+    default:
+      circuitBreaker:
+        # 强制打开熔断器，如果将属性设置为true，强制断路器进入打开状态，将会拒绝所有的请求，默认false关闭
+        forceOpen: false
+        # 触发熔断错误比例与之 默认值50%
+        errorThresholdPercentage: 50
+        # 熔断后休眠时长，默认值5s
+        sleepWindowInMilliseconds: 3000
+        # 熔断触发最小请求次数，默认值20个
+        requestVolumeThreshold: 2
+      execution:
+        isolation:
+          thread:
+            # 熔断超时设置 默认为1s
+            timeoutInMilliseconds: 4000
+  threadpool:
+    default:
+      coreSize: 10
+      maxQueueSize: 1500
+      queueSizeRejectionThreshold: 1000
+
+
+feign:
+  hystrix:
+    enabled: true
+  # 开启请求和响应的压缩
+  compression:
+    request:
+      enabled: true
+      # mime-types: text/xml 有默认值
+      min-request-size: 2048 # 开始进行压缩的下限
+    response:
+      enabled: true
+
+product-service-product:
+  ribbon:
+    ConnectTimeout: 2000 #请求连接超时时间
+    ReadTimeout: 4000 #请求处理超时时间
+    OkToRetryOnAllOperation: true # 进行重试
+    MaxAutoRetries: 0 # 第一次访问失败，重试的次数
+    MaxAutoRetriesNextServer: 0 # 切换实例的重试次数
+    MFLoadBanancerRueClassName: com.netflix.loadbalancer.RandomRule #负载均衡策略
+```
+
+
+
+
+
+### 5.1.6 Nacos数据模型（领域模型）
+
+
+
+NameSpace命名空间，Group分组、集群这些都是为了进行归类管理，**把服务和配置文件**进行归类，归类之后可以实现一定的效果，比如**隔离**。
+
+对于服务来说，**不同命名空间中的服务不能够互相访问调用**
+
+
+
+
+
+![image-20210314103251194](../picture/SpringCloud/image-20210314103251194.png)
+
+
+
+
+
+
+
+- Namespace：命名空间，对不同的**环境**进行隔离，比如隔离开发/测试/生产 环境。一个命名空间中可以定义多个group，各个分组之间是相互隔离的
+
+- Group：将若干个服务或者若干个配置集归为一组，通常一个系统归为一个组。
+- Service：某一个服务
+- Dataid：配置集或者可以认为是一个配置文件
+
+
+
+**Namespace + Group + Service，如同Maven中的GAV坐标锁定某个jar依赖，这里是为了锁定某个微服务**
+
+**Namespace + Group + Dataid ，如同Maven中的GAV坐标锁定某个jar依赖，这里是为了锁定配置文件**
+
+
+
+
+
+**最佳实践**
+
+Nacos抽象出了Namespace，Group，Service，Dataid等概念，具体代表什么拒绝鱼怎么用，推荐用法：
+
+
+
+| 概念      | 描述                                              |
+| --------- | ------------------------------------------------- |
+| Namespace | 代表不同的环境，如开发dev，测试test，生产环境prod |
+| Group     | 代表某项目，比如xx商城项目...                     |
+| Service   | 某个项目中具体xxx微服务                           |
+| Dataid    | 某个项目中具体的xxx配置文件                       |
+
+
+
+
+
+### 5.1.7 Nacos配置中心
+
+
+
+之前：SpringCloud Config + SpringCloud Bus，实现配置的自动更新
+
+1. 在Gitee上添加配置文件
+2. 创建Config Server配置中心  ->从git上下载配置信息
+3. 具体的微服务最终通过 Config Client  连接到 Config Server，获取到的gitee上的配置信息
+
+
+
+有Nacos后，分布式配置就简单很多，Github不需要了，配置信息配置在Nacos Server中，Bus也不需要了（依然可以完成动态刷新）
+
+
+
+1. 在Nacos Server中添加配置信息（可以导入外部配置或新建）
+2. 改造微服务，使其成为Nacos Config Client，从Nacos Server中获得配置信息
+
+
+
+![image-20210314111217720](../picture/SpringCloud/image-20210314111217720.png)
+
+
+
+
+
+添加nacos config依赖：可以从nacos配置中心获得配置信息
+
+```xml
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+</dependency>
+```
+
+
+
+微服务中如何锁定Nacos Server中的配置文件（dataid）
+
+Namespace+Group+dataid来锁定配置文件
+
+```
+${prefix}-${spring.profile.active}.${file-extension}
+```
+
+- prefix默认为spring.application.name的值，也可以通过配置项`spring.cloud.nacos.config.prefix`来配置 。**默认就是项目名**
+
+- `spring.profile.active`即为当前环境对应的profile，**注意：当 `spring.profile.active`为空时，对应的连接符 - 也将不存在，dataid的拼接格式变成 `${prefix}.${file-extension}`**
+
+- `file-extension`为配置内容的数据格式，通过spring.cloud.nacos.config.file-extension来配置，目前只支持pro和yaml类型
+
+
+
+```yaml
+cloud:
+  nacos:
+    discovery:
+      server-addr: 127.0.0.1:8848
+    config:
+      server-addr: 127.0.0.1:8848
+      # namespace: public没有命名空间id
+      # group 默认DEFAULT GROUP 可以不设置
+      file-extension: yaml
+```
+
+
+
+```java
+@RestController
+@RequestMapping("/nacosconfig")
+@RefreshScope
+public class NacosConfigController {
+
+    @Value("${hcr.message}")
+    private String message;
+
+    @RequestMapping("/query")
+    public String getNacosConfig(){
+        return message;
+    }
+}
+```
+
+
+
+
+
+需要**将配置文件改为bootstrap.yaml，在启动时加载！**
+
+![image-20210314125409953](../picture/SpringCloud/image-20210314125409953.png)
+
+
+
+更改配置：**直接实现了自动刷新，无需手动刷新**
+
+![image-20210314125612955](../picture/SpringCloud/image-20210314125612955.png)
+
+
+
+一个微服务从配置中心Nacos Config获取多个配置文件？
+
+**扩展配置文件**
+
+```yaml
+cloud:
+  nacos:
+    discovery:
+      server-addr: 127.0.0.1:8848
+    config:
+      server-addr: 127.0.0.1:8848
+      # namespace: public没有命名空间id
+      # group 默认DEFAULT GROUP 可以不设置
+      file-extension: yaml
+      #指定扩展的配置文件
+      ext-config:
+        - dataId: pagea.yaml
+          refresh: true #启用自动更新
+        - dataId: pageb.yaml
+          refresh: true
+```
+
+
+
+```java
+@RestController
+@RequestMapping("/nacosconfig")
+@RefreshScope
+public class NacosConfigController {
+
+    @Value("${hcr.message}")
+    private String message;
+    @Value("${pagea}")
+    private String pagea;
+    @Value("${pageb}")
+    private String pageb;
+
+    @RequestMapping("/query")
+    public String getNacosConfig(){
+        return message + "," + pagea + "," + pageb;
+    }
+}
+```
+
+
+
+![image-20210314130623728](../picture/SpringCloud/image-20210314130623728.png)
+
+**扩展配置文件也可以实现自动更新**
+
+
+
+
+
+
+
+## 5.2 SCA Sentinel 分布式系统的流量防卫兵
+
+
+
+### 5.2.1 Sentinel介绍
+
+
+
+Sentinel是一个面向云原生微服务的**流量控制，熔断降级**组件
+
+替代Hystrix，针对问题：服务营销、服务降级、服务熔断、服务限流
+
+
+
+Hystrix：
+
+服务消费者（静态化微服务）——> 调用服务提供者（商品微服务）
+
+![image-20210314131931126](../picture/SpringCloud/image-20210314131931126.png)
+
+减少代码开发，通过UI界面配置即可完成细粒度控制。独立部署Dashboard控制台组件（直接运行jar文件即可）。
+
+
+
+Sentinel分为两个部分：
+
+- 核心库：java客户端，不依赖任何框架/库，能够运行所有java运行时环境，同时对dubbo和SpringCloud等框架也有较好的支持
+- 控制台：Dashboard，基于springboot开发，打包后可以直接运行，不需要额外的tomcat等应用容器（springboot内置服务器）
+
+
+
+![image-20210314132324632](../picture/SpringCloud/image-20210314132324632.png)
+
+
+
+![image-20210314132736640](../picture/SpringCloud/image-20210314132736640.png)
+
+
+
+Sentinel生态：
+
+![image-20210314132938055](../picture/SpringCloud/image-20210314132938055.png)
+
+
+
+
+
+### 5.2.2 Sentinel Dashboard部署
+
+
+
+- 安装Dashboard
+
+下载：https://github.com/alibaba/Sentinel/releases
+
+运行该jar包
+
+用户名&密码：sentinel
+
+http://localhost:8080/#/dashboard
+
+![image-20210314142948982](../picture/SpringCloud/image-20210314142948982.png)
+
+
+
+
+
+### 5.2.3 服务改造
+
+对静态化微服务进行熔断降级等控制。
+
+
+
+```xml
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+</dependency>
+```
+
+
+
+修改配置文件（配置sentinel dashboard，暴露端点依然要有，删除原有Hystrix配置，删除OpenFeign降级配置）
+
+```yaml
+server:
+  port: 9002
+spring:
+  main:
+    allow-bean-definition-overriding: true # 解决bean重复注册问题
+  application:
+    name: product-service-page
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/cloud?useSSL=false&serverTimezone=GMT%2B8
+    username: root
+    password: huangchenrui20
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+      config:
+        server-addr: 127.0.0.1:8848
+        # namespace: public没有命名空间id
+        # group 默认DEFAULT GROUP 可以不设置
+        file-extension: yaml
+        #指定扩展的配置文件
+        ext-config:
+          - dataId: pagea.yaml
+            refresh: true #启用自动更新
+          - dataId: pageb.yaml
+            refresh: true
+    sentinel:
+      transport:
+        dashboard: 127.0.0.1:8080 # 指定sentinel控制台地址
+        port: 8719 # 在微服务运行期间，会启动一个httpserver，所用：与sentinel Dashboard进行交互 push模式
+
+
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "*" #默认为 health和info  添加refresh功能或者暴露所有的端口 ,暴露bus-refresh
+```
+
+上述配置后，发现sentinel控制台没有任何变化，**因为懒加载**，需要发起一次请求触发即可
+
+
+
+![image-20210314151758073](../picture/SpringCloud/image-20210314151758073.png)
+
+sentinel默认的超时降级时间是4s。
+
+
+
+
+
+
+
+### 5.2.4 Sentinel关键概念
+
+
+
+
+
+| 概念 | 概述                                                         |
+| ---- | ------------------------------------------------------------ |
+| 资源 | 可以是java中的任何内容，例如：由应用程序提供的服务，或由应用调用的其他应用提供的服务。**我们请求的API接口就是资源** |
+| 规则 | 围绕资源的实时状态设定的规则，流量控制规则，熔断降级规则以及系统保护规则，**都可以动态实时调整** |
+
+
+
+
+
+### 5.2.5 Sentinel 流量规则模块
+
+系统并发能力有限，可能有的系统支持的QPS为1，太多请求过来，就应该进行流量控制了，比如直接拒绝
+
+![image-20210314154700310](../picture/SpringCloud/image-20210314154700310.png)
+
+
+
+
+
+![image-20210314160708935](../picture/SpringCloud/image-20210314160708935.png)
+
+成功进行了流量控制并阻塞：
+
+![image-20210314155021958](../picture/SpringCloud/image-20210314155021958.png)
+
+
+
+
+
+- 资源名：默认请求路径
+- QPS：每秒钟请求数量，当调用该资源的QPS达到阈值时进行限流
+- 线程数：当**调用该资源**的**线程数**达到阈值的时候进行限流，如果说业务逻辑执行的时间很长，流量洪峰来临时，会耗费很多**线程资源**，这些线程资源会**堆积**，最终造成服务不可用，进一步上游服务不可用，最终可能雪崩
+
+- 流控模式：
+  - 直接：资源调用达到限流条件时，直接限流
+  - 关联：**关联的资源**调用达到阈值时限流自己
+  - 链路：只记录指定链路上的流量
+
+
+
+
+
+
+
+#### 测试线程流量限制
+
+![image-20210314161601211](../picture/SpringCloud/image-20210314161601211.png)
+
+同时发出两个请求：第二个请求直接被拒绝
+
+![image-20210314161635328](../picture/SpringCloud/image-20210314161635328.png)
+
+
+
+
+
+
+
+#### 测试关联
+
+
+
+![image-20210314162027329](../picture/SpringCloud/image-20210314162027329.png)
+
+
+
+
+
+![image-20210314162542495](../picture/SpringCloud/image-20210314162542495.png)
+
+
+
+对validateID发出大量请求
+
+![image-20210314162802559](../picture/SpringCloud/image-20210314162802559.png)
+
+这时候register请求就被限流： **因为validateID流量过大而导致register失败！**
+
+![image-20210314162959667](../picture/SpringCloud/image-20210314162959667.png)
+
+
+
+#### 链路限流
+
+
+
+链路指的是**请求链路（调用链）**
+
+同一个资源会被不同的调用链路进行调用
+
+链路模式下会控制该资源所在的调用链路 **入口的流量**，需要在规则中**配置入口资源**，即该调用链路**入口**的上下文名称
+
+**可能一个资源A被多条链路调用，但我们可以只监控其中一条的入口流入到A的流量，另一个链路到A的流量不进行统计**
+
+
+
+![image-20210314173452866](../picture/SpringCloud/image-20210314173452866.png)
+
+
+
+
+
+#### 流控效果之Warm Up
+
+
+
+预热？
+
+ 预热时长：默认单位为s，10s内都属于预热期。预热期不能正常访问。在预热期内阈值是设定阈值的1/3，10s后恢复正常。
+
+第一次访问后才会加载缓存。往往是在刚部署完项目，进入预热期，目的是**在预热期内加载缓存。**
+
+
+
+
+
+#### 排队等待
+
+
+
+排队等待模式下，会严格控制请求通过的间隔时间，即请求会 **匀速通过**，允许部分请求**排队等待**，通常用于消息队列削峰填谷等场景，需要设置**具体的超时时间**，当计算的等待时间超过超时时间时请求就会被拒绝
+
+> 超时时间指的是当前即将处理该请求（此时还在队列中，但是在队列头），但若在等**待了超时时间还是无法执行该请求（单机阈值1s一个），则将该请求作废**
+>
+> 比如：在100ms时发来一个请求，此时请求在队列中，但在0s时已经有一个请求执行，每秒只能执行一个请求，那么此时设置这个超时时间为900ms，正好在该请求等待了900ms的时候，可以执行这个请求！
+>
+> 又如：同时发来10个请求，超时时间为900ms，那么第一个请求执行完后其他请求 **理论来说都无法执行，但请求执行也需要时间，可能可以执行其中的一两条请求**
+
+![image-20210314180505436](../picture/SpringCloud/image-20210314180505436.png)
+
+
+
+发送10个请求：
+
+**请求没有被拒绝，都存在队列中，每秒只能执行一个请求！**
+
+![image-20210314181249086](../picture/SpringCloud/image-20210314181249086.png)
+
+
+
+
+
+
+
+
+
+### 5.2.6 Sentinel 降级规则模块
+
+流量控制是对**外部来的大流量**进行控制，**熔断降级的视角是对内部问题进行处理**
+
+Sentinel降级会在调用链路中某个资源出现不稳定状态时（超时、异常），对这个资源的调用进行限制，**让请求快速失败，避免影响到其他的资源而导致级联错误**。当资源被降级后，在接下来的降级时间窗口之内，对该资源的调用都自动熔断，**这里的降级其实是Hystrix中的熔断**
+
+
+
+#### 策略
+
+Sentinel不会像Hystrix那样放过一个请求**尝试自我修复**，就是明确按照时间窗口来，熔断触发后，**时间窗口内拒绝请求，时间窗口后就恢复**
+
+
+
+- **RT-平均响应时间**
+
+  **1s内至少要进入5个请求，**
+
+![image-20210314185721213](../picture/SpringCloud/image-20210314185721213.png)
+
+
+
+![image-20210314185817664](../picture/SpringCloud/image-20210314185817664.png)
+
+
+
+新版本能像Hystrix一样设置更多属性。
+
+![image-20210314190324892](../picture/SpringCloud/image-20210314190324892.png)
+
+
+
+- 异常比例
+
+当资源的每秒请求>=5 ,并且每秒异常总数占通过量的比值超过阈值之后，资源进入降级状态，在接下来的时间窗口内，对这个方法的调用都会自动返回
+
+![image-20210314191630096](../picture/SpringCloud/image-20210314191630096.png)
+
+在触发这个降级后，**5s的时间窗内**，对该请求的调用**都直接拒绝。**
+
+![image-20210314191610181](../picture/SpringCloud/image-20210314191610181.png)
+
+
+
+
+
+
+
+- 异常数
+
+当资源近1分钟的异常数超过阈值时，会进行熔断，注意统计时间窗口是分钟级别的，若timewindow小于60s，则结束熔断状态后仍然可能再次进入熔断状态，**时间窗口应该>=60s**
+
+如果时间窗口还是5s，那么结束熔断后，再次统计发现60s内异常次数还是超过了阈值，继续熔断......
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2989,6 +4610,13 @@ SpringCloud GateWay是 **异步非阻塞**
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-dependencies</artifactId>
             <version>Greenwich.RELEASE</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+            <version>2.1.0.RELEASE</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -3162,6 +4790,13 @@ product-service-product:
 
 
 
+## GateWay无法启动
+
+
+
+**不能同时引入webflux和web依赖！！**
+
+如果继承了父项目，那么将web的scope设置为test
 
 
 
@@ -3175,6 +4810,130 @@ product-service-product:
 
 
 
+## Config无法连接到github
+
+
+
+
+
+![image-20210313151248424](../picture/SpringCloud/image-20210313151248424.png)
+
+找不到解决方法。。。
+
+换成gitee。。。
+
+```yaml
+spring:
+  application:
+    name: product-cloud-config
+  cloud:
+    config:
+      server:
+        # git配置
+        git:
+          uri: https://gitee.com/Cuaaa/product-config.git #配置git地址
+          username: 1587723729@qq.com
+          password: huangchenrui20..
+          search-paths:
+            - product-config
+      label: master #分支
+```
+
+OK!
+
+![image-20210313154322749](../picture/SpringCloud/image-20210313154322749.png)
+
+
+
+
+
+## 使用@RefreshScope后无法访问配置中心的数据
+
+
+
+修改设置：
+
+```java
+@RefreshScope(proxyMode = ScopedProxyMode.DEFAULT)
+```
+
+![image-20210313165249244](../picture/SpringCloud/image-20210313165249244.png)
+
+
+
+功能恢复正常！
+
+
+
+
+
+
+
+## Nacos启动报错
+
+
+
+
+
+
+
+
+
+
+
+1. Nacos默认是集群启动，将cluster改为`set MODE=“standalone”`
+
+![image-20210313185041161](../picture/SpringCloud/image-20210313185041161.png)
+
+
+
+
+
+2. 可能出现数据库错误（暂时没发生）
+
+> 在MySQL中创建nacos数据库，进入nacos\conf目录下,使用 nacos-mysql.sql 初始化数据库。
+>
+> 修改 application.properties中的配置信息：
+>
+> ```
+> ###Count of DB:
+> 
+> ##打开注释
+> db.num=1
+> ```
+>
+> ```
+> ### Connect URL of DB:
+> 
+> ##修改数据库配置信息
+> db.url.0=jdbc:mysql://192.168.235.137:3306/nacos?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=UTC
+> db.user.0=root
+> db.password.0=root
+> ```
+>
+> ————————————————
+> 版权声明：本文为CSDN博主「Let_me_tell_you」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
+> 原文链接：https://blog.csdn.net/Let_me_tell_you/article/details/114462754
+
+
+
+
+
+
+
+## Nacos配置中心无法正常访问，报错
+
+
+
+```
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name ‘scopedTarget.nacosConfigController’: Injection of autowired dependencies failed; nested exception is java.lang.IllegalArgumentException: Could not resolve placeholder ‘config.info’ in value "${hcr.message}"
+
+The web application [ROOT] appears to have started a thread named [com.alibaba.nacos .naming.client.listener] but has failed to stop it…
+```
+
+内存泄漏，栈溢出。。。
+
+**重启Nacos**就好了！
 
 
 
@@ -3188,9 +4947,22 @@ product-service-product:
 
 
 
+## Sentinel启动异常
 
 
 
+![image-20210314145356844](../picture/SpringCloud/image-20210314145356844.png)
+
+**Feign接口对应的微服务**已经被使用，无法再次注册这个组件了
+
+每个Feign接口在程序中只能注册一次。
 
 
 
+**需要允许进行覆盖注册！！解决bean重复注册问题**
+
+```yaml
+spring:
+  main:
+    allow-bean-definition-overriding: true # 解决bean重复注册问题
+```
