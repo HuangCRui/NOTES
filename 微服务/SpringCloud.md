@@ -4484,7 +4484,7 @@ Sentinel不会像Hystrix那样放过一个请求**尝试自我修复**，就是�
 
 - **RT-平均响应时间**
 
-  **1s内至少要进入5个请求，**
+  **1s内至少要进入5个请求，**RT最大为4900ms，**超出此阈值的都会算作 4900 ms**，若需要变更此上限可以通过启动配置项 `-Dcsp.sentinel.statistic.max.rt=xxx` 来配置。
 
 ![image-20210314185721213](../picture/SpringCloud/image-20210314185721213.png)
 
