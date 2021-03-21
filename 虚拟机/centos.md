@@ -190,19 +190,25 @@ systemctl disable firewalld.service
 
 
 
-下载并安装MySQL官方的 Yum Repository,Mysql版本8.0.20
+下载并安装MySQL官方的 Yum Repository,Mysql版本8.0.20（5.7）
+
+两个版本的安装方法：
 
 ```
 wget -i -c ``http://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm
+
+wget https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm
 ```
 
 下载后直接yum安装
 
 ```
 yum -y install mysql80-community-release-el7-3.noarch.rpm
+
+yum -y localinstall mysql57-community-release-el7-11.noarch.rpm
 ```
 
-安装MySQL服务器
+在线安装MySQL服务器
 
 ```
 yum -y install mysql-community-server
@@ -238,9 +244,14 @@ systemctl status mysqld.service
 
 ```
 grep "password"/var/log/mysqld.log
+vim /var/log/mysqld.log  中搜索
 ```
 
 `S/u>j*3JV4h!`
+
+![image-20210319163001548](../picture/centos/image-20210319163001548.png)
+
+l;ZlyZ?JL2%A
 
 
 
