@@ -206,11 +206,11 @@ $("#app").append("<h2>Hello Word! !</h2>");
 
 ----
 
-1. **v-text 指令**
+#### **v-text 指令**
 
-   作用: 获取data数据, 设置标签的内容.
+作用: 获取data数据, 设置标签的内容.
 
-   注意: 默认写法会替换全部内容,使用插值表达式{{}}可以替换指定内容  
+注意: 默认写法会替换全部内容,使用插值表达式{{}}可以替换指定内容  
 
 ```html
 <!-- v-text 获取data数据,设置标签内容,会覆盖之前的内容体-->
@@ -227,7 +227,7 @@ $("#app").append("<h2>Hello Word! !</h2>");
 
 ----
 
-2. **v-html 指令**  
+#### **v-html 指令**  
 
 作用: 设置元素的 **innerHTML** (可以**向元素中写入新的标签**)  
 
@@ -271,7 +271,7 @@ document.getElementById("x").innerHTML = "<a href='https://www.baidu.com'>百度
 
 ----
 
-3. **v-on 指令**  
+#### **v-on 指令**  
 
 
 
@@ -427,7 +427,7 @@ var VM = new Vue({
 
 
 
-5. **v-show指令**  
+#### **v-show指令**  
 
 
 
@@ -489,7 +489,7 @@ v-show 指令总结
 
 
 
-6. **v-if 指令**  
+#### **v-if 指令**  
 
 
 
@@ -522,7 +522,7 @@ v-if 指令总结
 
 
 
-7. **v-bind 指令**  
+#### **v-bind 指令**  
 
 
 
@@ -582,7 +582,7 @@ v-bind 可以省略，简写为冒号 ：
 
 
 
-8. **v-for 指令**  
+#### **v-for 指令**  
 
 作用: 根据数据**生成列表结构**  
 
@@ -641,9 +641,10 @@ v-for指令总结
 
 ---
 
-9. v-on 指令补充
-   1. 传递自定义参数 : 函数**调用传参**
-   2. 事件修饰符: 对**事件触发的方式**进行限制  
+#### v-on 指令补充
+
+1. 传递自定义参数 : 函数**调用传参**
+2. 事件修饰符: 对**事件触发的方式**进行限制  
 
 
 
@@ -699,7 +700,7 @@ v-for指令总结
 
 
 
-10. **MVVM模式**  
+#### **MVVM模式**  
 
 
 
@@ -757,7 +758,7 @@ v-for指令总结
 
 
 
-11. v-mode 指令  
+#### v-model 指令  
 
 
 
@@ -1384,7 +1385,7 @@ display: none;
 
 
 
-在Vue应用中，在模板中双向绑定一些数据或者表达式，但是表达式如果过长，或者逻辑更为复杂时，就会变得臃肿甚至难以维护和阅读，比如下面的代码:  
+在Vue应用中，在模板中双向绑定一些数据或者表达式，但是表达式如果过长，或者逻辑更为复杂时，就会变得臃肿甚至难以维护和阅读，
 
 
 
@@ -2341,6 +2342,140 @@ beforeupdate：
 
 
 
+
+
+# npm
+
+
+
+## 一、简介 
+
+### 什么是NPM
+
+NPM全称Node Package Manager，是Node.js包管理工具，是全球最大的模块生态系统，里面所有的模块都是开源免费的；也是Node.js的包管理工具，相当于前端的Maven 。
+
+
+
+ 
+
+```
+#在命令提示符输入 npm -v 可查看当前npm版本
+npm -v
+```
+
+## **二、使用npm管理项目**
+
+创建08-npm文件夹
+
+### **1、项目初始化**
+
+ 
+
+```
+#建立一个空文件夹，在命令提示符进入该文件夹  执行命令初始化
+npm init
+#按照提示输入相关信息，如果是用默认值则直接回车即可。
+#name: 项目名称
+#version: 项目版本号
+#description: 项目描述
+#keywords: {Array}关键词，便于用户搜索到我们的项目
+#最后会生成package.json文件，这个是包的配置文件，相当于maven的pom.xml
+#我们之后也可以根据需要进行修改。
+```
+
+ 
+
+```
+#如果想直接生成 package.json 文件，那么可以使用命令
+npm init -y
+```
+
+### **2、修改npm镜像**
+
+NPM官方的管理的包都是从 http://npmjs.com下载的，但是这个网站在国内速度很慢。
+
+这里推荐使用淘宝 NPM 镜像 http://npm.taobao.org/ ，淘宝 NPM 镜像是一个完整 npmjs.com 镜像，同步频率目前为 10分钟一次，以保证尽量与官方服务同步。
+
+**设置镜像地址：**
+
+ 
+
+```
+#经过下面的配置，以后所有的 npm install 都会经过淘宝的镜像地址下载
+npm config set registry https://registry.npm.taobao.org 
+#查看npm配置信息
+npm config list
+```
+
+### **3、npm install命令**
+
+基本命令
+
+ 
+
+```
+#使用 npm install 安装依赖包的最新版，
+#简写 npm i
+#模块安装的位置：项目目录\node_modules
+#同时package.json 文件中，依赖包会被添加到dependencies节点下，类似maven中的 <dependencies>
+#默认参数：--save  简写  -S  将当前依赖保存在dependencies节点下
+npm install axios
+```
+
+下载特定版本的依赖
+
+ 
+
+```
+#如果安装时想指定特定的版本
+npm i axios@0.18.x
+```
+
+
+
+下载开发依赖
+
+ 
+
+```
+#devDependencies节点：开发时的依赖包，项目打包到生产环境的时候不包含的依赖
+#使用 -D参数将依赖添加到devDependencies节点
+npm i --save-dev mockjs
+#或简写
+npm i -D mockjs
+```
+
+根据依赖下载安装包
+
+ 
+
+```
+#npm管理的项目在备份和传输的时候一般不携带node_modules文件夹
+#安装会自动在项目目录下添加 package-lock.json文件，这个文件帮助锁定安装包的版本
+npm i #根据package.json中的配置下载依赖，初始化项目
+```
+
+### **4、其它命令**
+
+ 
+
+```
+#更新包（更新到最新版本）
+npm update 包名
+#卸载包
+npm uninstall 包名
+```
+
+ 
+
+
+
+
+
+
+
+
+
 # Vue-cli & ElementUI
 
 
@@ -2428,8 +2563,8 @@ npm config ls
 修改包管理路径
 
 ```
-npm config set cache "E:\nodejs_package\npm_cache"
-npm config set prefix "E:\nodejs_package\npm_modules"
+npm config set cache "D:\nodejs_package\npm_cache"
+npm config set prefix "D:\nodejs_package\npm_modules"
 ```
 
 就是远程下载的js包存放的路径

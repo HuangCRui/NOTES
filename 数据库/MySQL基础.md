@@ -1469,110 +1469,226 @@ set global transaction isolation level SERIALIZABLE;
 
 
 
+# 多表
 
 
 
+实际开发中，一个项目通常需要很多张表才能完成。
 
+例如一个商城项目的数据库,需要有很多张表：用户表、分类表、商品表、订单表....  
 
 
 
+## 单表的缺点  
 
 
 
 
 
+```mysql
+-- 创建emp表 主键自增
+CREATE TABLE emp(
+eid INT PRIMARY KEY AUTO_INCREMENT,
+ename VARCHAR(20),
+age INT ,
+dep_name VARCHAR(20),
+dep_location VARCHAR(20)
+);
+```
 
 
 
+```
+-- 添加数据
+INSERT INTO emp (ename, age, dep_name, dep_location) VALUES ('张百万', 20, '研发部', '广州');
+INSERT INTO emp (ename, age, dep_name, dep_location) VALUES ('赵四', 21, '研发部', '广州');
+INSERT INTO emp (ename, age, dep_name, dep_location) VALUES ('广坤', 20, '研发部', '广州');
+INSERT INTO emp (ename, age, dep_name, dep_location) VALUES ('小斌', 20, '销售部', '深圳');
+INSERT INTO emp (ename, age, dep_name, dep_location) VALUES ('艳秋', 22, '销售部', '深圳');
+INSERT INTO emp (ename, age, dep_name, dep_location) VALUES ('大玲子', 18, '销售部', '深圳');
+```
 
+1) 冗余, 同一个字段中出现大量的重复数据  
 
+![image-20210401083520469](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401083520469.png)
 
 
 
 
 
+## 解决方案  
 
 
 
+设计为两张表  
 
+\1. 多表方式设计
+department 部门表 : id, dep_name, dep_location
+employee 员工表: eid, ename, age, dep_id  
 
 
 
+```mysql
+-- 创建部门表
+-- 一方,主表
+CREATE TABLE department(
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    dep_name VARCHAR(30),
+    dep_location VARCHAR(30)
+);
+-- 创建员工表
+-- 多方 ,从表
+CREATE TABLE employee(
+    eid INT PRIMARY KEY AUTO_INCREMENT,
+    ename VARCHAR(20),
+    age INT,
+    dept_id INT
+);
+```
 
 
 
+```mysql
+-- 添加2个部门
+INSERT INTO department VALUES(NULL, '研发部','广州'),(NULL, '销售部', '深圳');
+SELECT * FROM department;
 
+-- 添加员工,dep_id表示员工所在的部门
+INSERT INTO employee (ename, age, dept_id) VALUES ('张百万', 20, 1);
+INSERT INTO employee (ename, age, dept_id) VALUES ('赵四', 21, 1);
+INSERT INTO employee (ename, age, dept_id) VALUES ('广坤', 20, 1);
+INSERT INTO employee (ename, age, dept_id) VALUES ('小斌', 20, 2);
+INSERT INTO employee (ename, age, dept_id) VALUES ('艳秋', 22, 2);
+INSERT INTO employee (ename, age, dept_id) VALUES ('大玲子', 18, 2);
+SELECT * FROM employee;
+```
 
 
 
+1) 员工表中有一个字段dept_id 与**部门表中的主键对应**,员工表的这个字段就叫做 **外键**
+2) 拥有外键的员工表 被称为 **从表** , 与**外键对应的主键**所在的表叫做 **主表**  
 
+![image-20210401083907909](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401083907909.png)
 
 
 
 
 
+**多表设计上的问题**  
 
 
 
+当我们在 员工表的 dept_id 里面输入不存在的部门id ,数据依然可以添加 显然这是不合理的  
 
 
 
+```
+-- 插入一条 不存在部门的数据3
+INSERT INTO employee (ename,age,dept_id) VALUES('无名',35,3);
+```
 
+实际上我们应该保证,员工表所添加的 dept_id , 必须在部门表中存在  
 
+![image-20210401084108235](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401084108235.png)
 
 
 
+**使用外键约束,约束 dept_id ,   必须是 部门表中存在的id  **
 
 
 
 
 
+## 外键约束  
 
 
 
+- 外键指的是在 **从表** 中 与 **主表 的主键**对应的那个字段,比如员工表的 dept_id,就是外键
 
+- 使用外键约束可以让两张表之间**产生一个对应关系**,从而**保证主从表的引用的完整性**  
 
 
 
+多表关系中的主表和从表
 
+- 主表: 主键id所在的表, **约束别人的表**
+- 从表: 外键所在的表, **被约束的表**  
 
 
 
+![image-20210401084255612](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401084255612.png)
 
 
 
+---
 
+- **创建外键约束  **
 
 
 
+新建表时添加外键  
 
+```
+[CONSTRAINT] [外键约束名称] FOREIGN KEY(外键字段名) REFERENCES 主表名(主键字段名)
+```
 
+已有表添加外键  
 
+```
+ALTER TABLE 从表 ADD [CONSTRAINT] [外键约束名称] FOREIGN KEY (外键字段名) REFERENCES 主表(主 键字段名);
+```
 
 
 
+```mysql
+-- 重新创建 employee表,添加外键约束
+CREATE TABLE employee(
+    eid INT PRIMARY KEY AUTO_INCREMENT,
+    ename VARCHAR(20),
+    age INT,
+    dept_id INT,
+    -- 添加外键约束
+    CONSTRAINT emp_dept_fk FOREIGN KEY(dept_id) REFERENCES department(id)
+);
+```
 
 
 
+![image-20210401084849160](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401084849160.png)
 
+添加外键约束,就会产生***强制性的外键数据检查, 从而保证了数据的完整性和一致性***  
 
 
 
+这两个表的字段就**关联在了一起**
 
+![image-20210401085130818](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401085130818.png)
 
 
 
 
 
+---
 
+- **删除外键约束  **
 
 
 
+```mysql
+alter table 从表 drop foreign key 外键约束名称
 
+-- 删除employee 表中的外键约束,外键约束名 emp_dept_fk
+ALTER TABLE employee DROP FOREIGN KEY emp_dept_fk;
+```
 
 
 
+再将外键 添加回来  
 
+```
+-- 可以省略外键名称, 系统会自动生成一个
+ALTER TABLE employee ADD FOREIGN KEY (dept_id) REFERENCES department (id);
+```
 
 
 
@@ -1580,17 +1696,32 @@ set global transaction isolation level SERIALIZABLE;
 
 
 
+----
 
+- **外键约束的注意事项  **
 
 
 
+1. 从表外键类型必须与主表主键**类型一致** 否则创建失败  
 
+2. 添加数据时, 应该**先添加主表中的数据.**  
 
+3. 删除数据时,应该**先删除从表**中的数据.  **在从表中有对这个外键数据的引用，还不能删除。需要先删除从表中对外键的引用。**
 
 
 
+```mysql
+-- 删除数据时 应该先删除从表中的数据
+-- 报错 Cannot delete or update a parent row: a foreign key constraint fails
+-- 报错原因 不能删除主表的这条数据,因为在从表中有对这条数据的引用
+DELETE FROM department WHERE id = 3;
 
 
+-- 先删除从表的关联数据
+DELETE FROM employee WHERE dept_id = 3;
+-- 再删除主表的数据
+DELETE FROM department WHERE id = 3;
+```
 
 
 
@@ -1600,30 +1731,62 @@ set global transaction isolation level SERIALIZABLE;
 
 
 
+### 级联删除操作  
 
 
 
 
 
+如果想实现**删除主表数据的同时,也删除掉从表数据,**可以使用级联删除操作  
 
 
 
+```
+创建表示添加  级联删除
+ON DELETE CASCADE
+```
 
 
 
+```mysql
+-- 重新创建添加级联操作
+CREATE TABLE employee(
+eid INT PRIMARY KEY AUTO_INCREMENT,
+ename VARCHAR(20),
+age INT,
+dept_id INT,
+CONSTRAINT emp_dept_fk FOREIGN KEY(dept_id) REFERENCES department(id)
+-- 添加级联删除
+ON DELETE CASCADE
+);
+-- 添加数据
+INSERT INTO employee (ename, age, dept_id) VALUES ('张百万', 20, 1);
+INSERT INTO employee (ename, age, dept_id) VALUES ('赵四', 21, 1);
+INSERT INTO employee (ename, age, dept_id) VALUES ('广坤', 20, 1);
+INSERT INTO employee (ename, age, dept_id) VALUES ('小斌', 20, 2);
+INSERT INTO employee (ename, age, dept_id) VALUES ('艳秋', 22, 2);
+INSERT INTO employee (ename, age, dept_id) VALUES ('大玲子', 18, 2);
+```
 
 
 
 
 
+# 多表关系设计  
 
 
 
 
 
+实际开发中，**一个项目通常需要很多张表才能完成**。例如：一个商城项目就需要分类表(category)、商品表(products)、订单表(orders)等多张表。且这些表的数据之间存在一定的关系
 
 
 
+| 表与表之间的三种关系                                |
+| --------------------------------------------------- |
+| 一对多关系: 最常见的关系, 学生对班级,员工对部门     |
+| 多对多关系: 学生与课程, 用户与角色                  |
+| 一对一关系: 使用较少,因为一对一关系可以合成为一张表 |
 
 
 
@@ -1633,81 +1796,152 @@ set global transaction isolation level SERIALIZABLE;
 
 
 
+## 一对多关系(常见)  
 
 
 
+一对多关系（1:n）
 
+- 例如：班级(主键id)和学生（外键->班级id），部门和员工，客户和订单，分类和商品
 
+一对多建表原则
 
+- 在从表(多方)创建一个字段,**字段作为外键指向主表(一方)的主键**  
 
 
 
+**“多”指向“一”的那一方的主键**
 
+![image-20210401090640446](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401090640446.png)
 
 
 
 
 
+## 多对多关系(常见)  
 
 
 
+多对多（m:n）
 
+- 例如：老师和学生，学生和课程，用户和角色
 
+多对多关系建表原则
 
+- 需要创建**第三张表**，中间表中**至少两个字段**，这两个字段**分别作为外键指向各自一方的 主键。**  
 
+**中间表来联系两个表，**
 
+**不然每个学生的信息需要对应多个课程表信息，学生的信息就要有多行，每行对应一个不同的课程。会产生冗余信息**
 
+![image-20210401092352371](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401092352371.png)
 
 
 
+## 一对一关系  
 
 
 
+一对一（1:1）
 
+- 在实际的开发中应用不多.因为一对一**可以创建成一张表**。（不会有冗余，**都是一一对应的**）
 
+一对一建表原则
 
+- 外键唯一 主表的主键和从表的外键（唯一），形成主外键关系，外键唯一 UNIQUE  
 
+**任意一方添加外键都可以。**
 
+![image-20210401093755337](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401093755337.png)
 
 
 
+## 设计 省&市表  
 
 
 
 
 
+省和市之间的关系是 一对多关系,一个省包含多个市  
 
 
 
+```mysql
+#创建省表 (主表,注意: 一定要添加  主键约束)
+CREATE TABLE province(
+	id INT PRIMARY KEY auto_increment,
+	name VARCHAR(20),
+	description VARCHAR(20)
+);
 
+#创建市表 (从表,注意: 外键类型一定要与主表主键一致)
+CREATE TABLE city(
+	cid int PRIMARY KEY auto_increment,
+	name VARCHAR(20),
+	description VARCHAR(20),
+	pid INT,
+	-- 添加外键约束
+	CONSTRAINT pro_city_fk FOREIGN KEY (pid) REFERENCES province(id)
+)
+```
 
 
 
+![image-20210401095111058](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401095111058.png)
 
 
 
 
 
+## 设计 演员与角色表  
 
 
 
 
 
+演员与角色 是多对多关系, 一个演员可以饰演多个角色, 一个角色同样可以被不同的演员扮演  
 
 
 
+![image-20210401095207482](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401095207482.png)
 
 
 
 
 
+```mysql
+CREATE TABLE actor(
+	id INT PRIMARY KEY auto_increment,
+	name VARCHAR(20)
+);
 
+CREATE TABLE role(
+	id INT PRIMARY KEY auto_increment,
+	name VARCHAR(20)
+);
 
+CREATE TABLE actor_role(
+	id INT PRIMARY KEY auto_increment,
+	
+	aid INT,
+	rid INT,
+	FOREIGN KEY (aid) REFERENCES actor(id),
+	FOREIGN KEY (rid) REFERENCES role(id)
+);
+```
 
+也可以手动添加外键约束：
 
+```mysql
+-- 为中间表的aid字段,添加外键约束 指向演员表的主键
+ALTER TABLE actor_role ADD FOREIGN KEY(aid) REFERENCES actor(id);
+-- 为中间表的rid字段, 添加外键约束 指向角色表的主键
+ALTER TABLE actor_role ADD FOREIGN KEY(rid) REFERENCES role(id);
+```
 
 
 
+![image-20210401095647866](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401095647866.png)
 
 
 
@@ -1717,9 +1951,1465 @@ set global transaction isolation level SERIALIZABLE;
 
 
 
+# 多表查询  
 
 
 
+DQL: 查询多张表,获取到需要的数据
+
+比如 我们要查询   **家电分类下 都有哪些商品**,那么我们就需要查询**分类与商品这两张表**  
+
+
+
+创建分类表与商品表  
+
+```mysql
+#分类表 (一方 主表)
+CREATE TABLE category (
+    cid VARCHAR(32) PRIMARY KEY ,
+    cname VARCHAR(50)
+);
+#商品表 (多方 从表)
+CREATE TABLE products(
+    pid VARCHAR(32) PRIMARY KEY ,
+    pname VARCHAR(50),
+    price INT,
+    flag VARCHAR(2), #是否上架标记为：1表示上架、0表示下架
+    category_id VARCHAR(32),
+    -- 添加外键约束
+    FOREIGN KEY (category_id) REFERENCES category (cid)
+);
+```
+
+
+
+插入数据  
+
+
+
+```mysql
+#分类数据
+INSERT INTO category(cid,cname) VALUES('c001','家电');
+INSERT INTO category(cid,cname) VALUES('c002','鞋服');
+INSERT INTO category(cid,cname) VALUES('c003','化妆品');
+INSERT INTO category(cid,cname) VALUES('c004','汽车');
+
+#商品数据
+INSERT INTO products(pid, pname,price,flag,category_id) VALUES('p001','小米电视机',5000,'1','c001');
+INSERT INTO products(pid, pname,price,flag,category_id) VALUES('p002','格力空调',3000,'1','c001');
+INSERT INTO products(pid, pname,price,flag,category_id) VALUES('p003','美的冰箱',4500,'1','c001');
+INSERT INTO products (pid, pname,price,flag,category_id) VALUES('p004','篮球鞋',800,'1','c002');
+INSERT INTO products (pid, pname,price,flag,category_id) VALUES('p005','运动裤',200,'1','c002');
+INSERT INTO products (pid, pname,price,flag,category_id) VALUES('p006','T恤',300,'1','c002');
+INSERT INTO products (pid, pname,price,flag,category_id) VALUES('p007','冲锋衣',2000,'1','c002');
+INSERT INTO products (pid, pname,price,flag,category_id) VALUES('p008','神仙水',800,'1','c003');
+INSERT INTO products (pid, pname,price,flag,category_id) VALUES('p009','大宝',200,'1','c003');
+```
+
+
+
+
+
+
+
+## 笛卡尔积  
+
+
+
+交叉连接查询,因为会产生笛卡尔积,所以 基本不会使用  
+
+**会产生所有组合**
+
+```
+SELECT 字段名 FROM 表1, 表2;
+```
+
+
+
+使用交叉连接查询 商品表与分类表  
+
+```
+SELECT * FROM category , products;
+```
+
+
+
+观察查询结果,产生了笛卡尔积 (得到的结果是无法使用的)  
+
+![image-20210401100409470](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401100409470.png)
+
+表A中的每一行都和表B中的每一行进行组合，**没有条件限制，全部组合一遍 A.length * B.length个结果，结果无用**
+
+![image-20210401100445499](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401100445499.png)
+
+
+
+---
+
+笛卡尔积
+
+假设集合A={a, b}，集合B={0, 1, 2}，则两个集合的笛卡尔积为{(a, 0), (a, 1), (a, 2), (b, 0), (b, 1), (b, 2)}  
+
+![image-20210401100535315](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401100535315.png)
+
+
+
+
+
+
+
+## 多表查询的分类  
+
+
+
+
+
+### 内连接查询  
+
+
+
+内连接的特点:
+
+通过**指定的条件**去匹配两张表中的数据, **匹配上就显示,匹配不上就不显示**
+
+- 比如通过: **从表的外键 = 主表的主键** 方式去匹配  
+
+
+
+---
+
+1. 隐式内连接
+
+from子句 后面直接写 **多个表名** 使用**where指定连接条件的** 这种连接方式是 **隐式内连接.**
+
+使用where条件过滤无用的数据  
+
+
+
+```
+SELECT 字段名 FROM 左表, 右表 WHERE 连接条件;
+```
+
+
+
+查询所有商品信息和**对应的分类**信息  
+
+```mysql
+SELECT * from products p, category c where p.category_id=c.cid
+```
+
+
+
+![image-20210401100852382](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401100852382.png)
+
+
+
+查询商品表的商品名称 和 价格,以及商品的分类信息  
+
+**可以通过给表起别名的方式, 方便我们的查询(有提示)**  
+
+
+
+```mysql
+SELECT 
+p.pname,p.price, c.cname  
+from products p, category c 
+where p.category_id=c.cid
+```
+
+
+
+查询 格力空调是属于哪一分类下的商品  
+
+```mysql
+SELECT p.pname, c.cname  from products p, category c 
+where p.pname='格力空调' AND p.category_id=c.cid
+```
+
+![image-20210401101426092](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401101426092.png)
+
+
+
+
+
+
+
+---
+
+
+
+2. **显式内连接  **
+
+
+
+使用 `inner join ...on` 这种方式, 就是**显式内连接**
+
+语法格式  
+
+```mysql
+SELECT 字段名 FROM 左表 [INNER] JOIN 右表 ON 条件
+-- inner 可以省略
+```
+
+
+
+查询所有商品信息和对应的分类信息  :
+
+```mysql
+SELECT * from category c INNER JOIN products p ON c.cid = p.category_id
+```
+
+
+
+查询鞋服分类下,价格大于500的商品名称和价格  :
+
+**先要将外键和主键连接 ——> 来拼接这两张表，再去设置查询条件**
+
+```mysql
+# 查询鞋服分类下,价格大于500的商品名称和价格
+-- 我们需要确定的几件事
+-- 1.查询几张表 products & category
+
+-- 2.表的连接条件 从表.外键 = 主表的主键
+-- 3.查询的条件 cname = '鞋服' and price > 500
+-- 4.要查询的字段 pname price
+
+SELECT
+	p.pname,
+	p.price 
+FROM
+	category c
+	INNER JOIN products p ON c.cname = '鞋服' 
+	AND p.price > 500 
+	AND c.cid = p.category_id
+```
+
+
+
+**on和where没啥区别。。。**
+
+
+
+
+
+
+
+### 外连接查询  
+
+
+
+#### 左外连接  
+
+
+
+左外连接 , 使用 **LEFT OUTER JOIN , OUTER 可以省略**
+
+左外连接的特点: 
+
+- 以**左表为基准**, 匹配右边表中的数据,如果匹配的上,就展示匹配到的数据
+- 如果匹配不到, 左表中的数据正常展示, **右边的展示为null.**  
+
+
+
+```mysql
+-- 左外连接查询
+SELECT * FROM category c LEFT JOIN products p ON c.`cid`= p.`category_id`;
+```
+
+
+
+![image-20210401103328908](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401103328908.png)
+
+反过来：
+
+![image-20210401103404673](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401103404673.png)
+
+
+
+查询每个分类下的商品个数  
+
+
+
+```mysql
+# 查询每个分类下的商品个数
+/*
+1.连接条件: 主表.主键 = 从表.外键
+2.查询条件: 每个分类 需要分组
+3.要查询的字段: 分类名称, 分类下商品个数
+*/
+
+SELECT
+	c.`cname` AS '分类名称',
+	COUNT( p.`pid` ) AS '商品个数' -- 每个分组中的商品的id作为count计数
+FROM
+	category c
+	LEFT JOIN products p ON c.cid = p.category_id 
+GROUP BY
+	c.cname
+```
+
+
+
+
+
+
+
+#### 右外连接  
+
+右外连接 , 使用 RIGHT OUTER JOIN , OUTER 可以省略
+
+右外连接的特点
+
+- 以右表为基准，匹配左边表中的数据，如果能匹配到，展示匹配到的数据
+- 如果匹配不到，右表中的数据正常展示, 左边展示为null  
+
+
+
+```
+-- 右外连接查询
+SELECT * FROM products p RIGHT JOIN category c ON p.`category_id` = c.`cid`;
+```
+
+
+
+
+
+
+
+### 连接方式总结
+
+
+
+![image-20210401105135182](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401105135182.png)
+
+
+
+- 内连接: inner join , 只获取两张表中 **交集部分**的数据.
+- 左外连接: left join , 以左表为基准 ,查询**左表的所有数据**, 以及**与右表有交集的部分**
+- 右外连接: right join , 以右表为基准,查询右表的所有的数据,以及与左表有交集的部分  
+
+
+
+
+
+# 子查询 (SubQuery)  
+
+
+
+
+
+## 什么是子查询  
+
+
+
+子查询概念
+
+- 一条select 查询语句的结果, 作为另一条 select 语句的一部分
+
+子查询的特点
+
+- 子查询必须放在小括号中
+- 子查询一般作为父查询的查询条件使用
+
+子查询常见分类
+
+- where型 子查询: 将**子查询的结果——>比如聚合结果**, 作为父查询的**比较条件**
+- from型 子查询 : 将子查询的结果, 作为 **一张表**,提供给父层查询使用
+- exists型 子查询: 子查询的结果是**单列多行**, 类似一个**数组**, 父层查询使用 **IN 函数** ,包含子查询的结果  
+
+
+
+
+
+## 子查询的结果作为查询条件  
+
+
+
+```
+SELECT 查询字段 FROM 表 WHERE 字段=（子查询）;
+```
+
+
+
+通过子查询的方式, 查询价格最高的商品信息  
+
+
+
+```mysql
+# 通过子查询的方式, 查询价格最高的商品信息
+-- 1.先查询出最高价格
+SELECT MAX(price) FROM products;
+
+-- 2.将最高价格作为条件,获取商品信息
+select * from products 
+where price = 
+(SELECT max(price) from products)
+```
+
+
+
+
+
+
+
+查询化妆品分类下的 商品名称 商品价格  
+
+
+
+```mysql
+#查询化妆品分类下的 商品名称 商品价格
+
+-- 先查出化妆品分类的 id
+SELECT cid FROM category WHERE cname = '化妆品';
+
+-- 根据分类id ,去商品表中查询对应的商品信息
+SELECT
+    p.`pname`,
+    p.`price`
+FROM products p
+WHERE p.`category_id` = (SELECT cid FROM category WHERE cname = '化妆品');
+```
+
+**也可以不使用子查询，但需要在from加载两个表，对这两个表进行内连接，条件为  `c.cname='化妆品' and c.cid=p.category_id...`**
+
+
+
+查询小于平均价格的商品信息  
+
+```mysql
+SELECT
+	* 
+FROM
+	products 
+WHERE
+	price < ( SELECT avg( price ) FROM products );
+```
+
+
+
+
+
+
+
+## 子查询的结果作为一张表  
+
+
+
+```
+SELECT 查询字段 FROM （子查询）表别名 WHERE 条件;  
+```
+
+
+
+查询商品中,价格大于500的商品信息,包括 商品名称 商品价格 商品所属分类名称  
+
+
+
+```mysql
+-- 1. 先查询分类表的数据
+SELECT * FROM category;
+
+-- 2.将上面的查询语句 作为一张表使用
+SELECT
+	p.`pname`,
+	p.`price`,
+	c.cname
+	-- 子查询作为一张表使用时 要起别名 才能访问表中字段
+	-- 其实直接使用category就完事了。。。
+FROM products p INNER JOIN (SELECT * FROM category) c 
+ON p.category_id = c.cid 
+WHERE p.price>500
+```
+
+注意： 当子查询作为一张表的时候，**需要起别名，否则无法访问表中的字段**  
+
+
+
+
+
+## 子查询结果是单列多行  
+
+
+
+子查询的结果类似一个数组, 父层查询使用 IN 函数 ,包含子查询的结果  
+
+```
+SELECT 查询字段 FROM 表 WHERE 字段 IN （子查询）;
+```
+
+
+
+查询价格小于两千的商品 ,   来自于哪些分类(名称)  
+
+
+
+```mysql
+-- 先查询价格小于2000 的商品的,分类ID
+SELECT DISTINCT category_id FROM products WHERE price < 2000;
+
+-- 在根据分类的id信息,查询分类名称
+-- 报错: Subquery returns more than 1 row
+-- 子查询的结果 大于一行 不能使用where条件=来比较
+SELECT * FROM category
+WHERE cid = (SELECT DISTINCT category_id FROM products WHERE price < 2000);
+
+-- 使用in函数
+-- 子查询获取的是单列多行数据
+SELECT * FROM category
+WHERE cid 
+IN (SELECT DISTINCT category_id FROM products WHERE price < 2000);
+```
+
+
+
+
+
+查询家电类 与 鞋服类下面的全部商品信息  
+
+```mysql
+# 查询家电类 与 鞋服类下面的全部商品信息
+-- 先查询出家电与鞋服类的 分类ID
+SELECT cid FROM category WHERE cname IN ('家电','鞋服');
+
+-- 根据cid 查询分类下的商品信息
+SELECT * FROM products
+WHERE category_id IN (SELECT cid FROM category WHERE cname IN ('家电','鞋服'));
+```
+
+
+
+
+
+1. 子查询如果查出的是**一个字段**(单列), 那就在where后面作为条件使用.IN
+2. 子查询如果查询出的是多个字段(多列), 就当做**一张表**使用(**要起别名**)  
+
+
+
+
+
+# 数据库设计  
+
+
+
+
+
+## 数据库三范式(空间最省)  
+
+
+
+概念: 三范式就是**设计数据库的规则**.
+
+- 为了建立**冗余较小、结构合理**的数据库，设计数据库时必须遵循一定的规则。在关系型数据库中这种规则就称为**范式**。范式是**符合某一种设计要求**的总结。要想设计一个结构合理的关系型数据库，必须满足一定的范式
+- 满足最低要求的范式是第一范式（1NF）。在第一范式的基础上进一步满足更多规范要求的称为第二范式（2NF） ， 其余范式以此类推。一般说来，数据库只需满足第三范式(3NF）就行了  
+
+
+
+
+
+### 第一范式 1NF  
+
+
+
+概念:
+
+- 原子性, 做到列不可拆分
+- 第一范式是最基本的范式。数据库表里面**字段都是单一属性的，不可再分**, 如果数据表中每个字段都是**不可再分的最小数据单元**，则满足第一范式。  
+
+
+
+地址信息表中, contry这一列,**还可以继续拆分**,不符合第一范式  
+
+**每列存储的信息可以    拆分出来  另一个属性表示的另一个字段**
+
+![image-20210401122442716](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401122442716.png)
+
+
+
+
+
+### 第二范式 2NF  
+
+
+
+概念:
+
+- 在第一范式的基础上更进一步，目标是**确保表中的每列都和主键相关**。
+- **一张表只能描述一件事**.
+
+示例:
+
+- 学员信息表中其实在描述两个事物 , **一个是学员的信息,一个是课程信息**
+- 如果放在一张表中,会导致**数据的冗余**,如果删除学员信息, **成绩的信息也被删除——>耦合**  
+- 如果删除课程信息，学院的信息也会被删除
+
+
+
+![image-20210401123126337](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401123126337.png)
+
+
+
+### 第三范式 3NF  
+
+
+
+概念:
+
+- 消除**传递依赖**
+- 表的信息，如果能够被推导出来，就**不应该单独的设计一个字段来存放**
+
+示例
+
+- 通过number 与 price字段就可以计算出总金额,不要在表中再做记录(空间最省)  
+
+
+
+![image-20210401123652757](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401123652757.png)
+
+
+
+
+
+
+
+## 数据库反三范式  
+
+
+
+反范式化指的是通过**增加冗余或重复的数据**来提高数据库的读性能
+
+**浪费存储空间,节省查询时间** (以***空间换时间***  )  
+
+
+
+
+
+**冗余字段：**
+
+- 设计数据库时，某一个字段属于一张表，但它**同时出现在另一个或多个表**，且完全等同于它在其本来所属表的意义表示，那么这个**字段就是一个冗余字段**  
+
+
+
+**反三范式示例  **
+
+
+
+![image-20210401124549739](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401124549739.png)
+
+使用场景：
+
+- 当需要查询“订单表”所有数据并且只需要“用户表”的name字段时, 没有冗余字段 就需要**去join**
+  **连接用户表**,假设表中数据量非常的大, 那么会这次**连接查询就会非常大的消耗系统的性能**.
+- 这时候冗余的字段就可以派上用场了, **有冗余字段我们查一张表**就可以了.  
+
+
+
+创建一个关系型数据库设计，我们有两种选择：
+
+1. 尽量遵循范式理论的规约，尽可能少的冗余字段，让数据库**设计看起来精致、优雅**、让人心醉。。。。
+2. 合理的**加入冗余字段这个润滑剂**，减少join，让**数据库执行性能更高更快**。  
+
+
+
+
+
+
+
+
+
+
+
+# MySQL 索引  
+
+
+
+
+
+## 什么是索引  
+
+
+
+在数据库表中，对字段建立索引可以大大**提高查询速度**。通过善用这些索引，可以令MySQL的查询和运行更加高效。
+
+如果合理的设计且使用索引的MySQL是一辆兰博基尼的话，那么没有设计和使用索引的MySQL就是一个人力三轮车。拿汉语字典的目录页（索引）打比方，我们可以按拼音、笔画、偏旁部首等排序的目录（索引）快速查找到需要的字  
+
+
+
+## 常见索引分类  
+
+
+
+| 索引名称                   | 说明                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| **主键索引** (primary key) | 主键是一种**唯一性**索引,每个表只能有一个主键, 用于**标识数据表中的*每一条记录*** |
+| **唯一索引** (unique)      | 唯一索引指的是 索引**列的所有值都只能出现一次**, 必须唯一.   |
+| **普通索引** (index)       | 最常见的索引,作用就是 加快对数据的访问速度                   |
+
+
+
+MySql将一个表的索引都保存在同一个索引文件中, 如果对数据进行增删改操作,MySql都会**自动的更新索引.**  
+
+
+
+![image-20210401125455156](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401125455156.png)
+
+
+
+在my.ini中修改data路径如下：
+
+![image-20210401125950054](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401125950054.png)
+
+
+
+
+
+### 主键索引 (PRIMARY KEY)  
+
+
+
+特点: 主键是一种**唯一性索引**,每个表只能有一个主键,用于标识数据表中的某一条记录。
+
+一个表可以没有主键，但最多只能有一个主键，并且**主键值不能包含NULL**。  
+
+**主键属性   本身就是一个索引了**
+
+```
+ALTER TABLE 表名 ADD PRIMARY KEY ( 列名 )
+```
+
+
+
+
+
+### 唯一索引(UNIQUE)  
+
+
+
+特点: 索引列的所有值都只能出现一次, 必须唯一.
+
+唯一索引可以**保证数据记录的唯一性**。事实上，在许多场合，人们创建唯一索引的目的往往不是为了提高访问速度，而只是为了**避免数据出现重复**。  
+
+
+
+```
+create unique index 索引名 on 表名(列名(长度))
+ALTER TABLE 表名 ADD UNIQUE ( 列名 )
+```
+
+```
+CREATE UNIQUE INDEX ind_cname ON category(cname);
+
+```
+
+![image-20210401131052236](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401131052236.png)
+
+
+
+唯一索引保证了数据的唯一性,索引的效率也提升了  
+
+
+
+
+
+
+
+### 普通索引 (INDEX)  
+
+
+
+普通索引（由关键字KEY或INDEX定义的索引）的唯一任务是**加快对数据的访问速度**。因此，应该只为那些**最经常出现在查询条件**（WHERE column=）或**排序条件**（ORDERBY column）中的数据列创建索引  
+
+
+
+使用create index 语句创建: 在已有的表上创建索引  
+
+```mysql
+create index 索引名 on 表名(列名[长度])
+
+ALTER TABLE 表名 ADD INDEX 索引名 (列名)
+ALTER TABLE products ADD INDEX ind_pname (pname)
+```
+
+
+
+
+
+### 删除索引  
+
+由于索引会**占用一定的磁盘空间**，因此，为了避免影响数据库的性能，应该及时删除不再使用的索引  
+
+```mysql
+ALTER TABLE table_name DROP INDEX index_name;
+
+ALTER TABLE demo01 DROP INDEX dname_indx;
+```
+
+
+
+
+
+
+
+## 索引性能测试  
+
+
+
+查询 test_index 表中的总记录数  
+
+```
+SELECT COUNT(*) FROM test_index;
+```
+
+![image-20210401133700214](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401133700214.png)
+
+表中有 500万条数据  
+
+
+
+为 dname字段 添加索引  
+
+```
+#添加索引
+ALTER TABLE test_index ADD INDEX dname_indx(dname);
+```
+
+
+
+注意: 一般我们都是在创建表的时候 就确定需要添加索引的字段  
+
+执行分组查询  
+
+```
+SELECT * FROM test_index where dname='name900000';
+```
+
+12s -> 0.3s
+
+
+
+## 索引的优缺点总结  
+
+
+
+添加索引首先应考虑在 **where** 及 **order by** 涉及的列上建立索引。
+
+索引的优点
+
+1. 大大的提高查询速度
+2. 可以**显著的减少查询中分组和排序的时间**。
+
+索引的缺点
+
+1. **创建索引和维护索引需要时间**，而且数据量越大时间越长
+2. 当对表中的数据进行增加，修改，删除的时候，**索引也要同时进行维护**，降低了**数据的维护速度**  
+
+
+
+
+
+
+
+
+
+
+
+# MySQL 视图  
+
+
+
+## 什么是视图  
+
+
+
+1. 视图是一种虚拟表。
+2. 视图建立在已有表的基础上, 视图赖以建立的这些表称为**基表**。
+3. 向视图提供数据内容的语句为 **SELECT 语句**, 可以将视图**理解为存储起来的 SELECT 语句.**
+4. 视图向用户**提供基表数据的另一种表现形式**  
+
+
+
+## 视图的作用  
+
+
+
+- **权限控制**时可以使用
+  - 比如,某几个列可以运行用户查询,其他列不允许,可以开通视图 查询特定的列, 起到权限控制的作用
+- 简化复杂的多表查询
+  - 视图 本身就是**一条查询SQL**,我们可以**将一次复杂的查询 构建成一张视图**, 用户只要查询视图就可以**获取想要得到的信息**(**不需要再编写复杂的SQL)**
+  - 视图主要就是为了**简化多表的查询**  
+
+
+
+## 视图的使用  
+
+
+
+```
+create view 视图名 [column_list] as select语句;
+
+view: 表示视图
+column_list: 可选参数，表示属性清单，指定视图中各个属性的名称，默认情况下，与SELECT语句中查询的属性相同
+as : 表示视图要执行的操作
+select语句: 向视图提供数据内容
+```
+
+
+
+```mysql
+#1. 先编写查询语句
+#查询所有商品 和 商品的对应分类信息
+SELECT * FROM products p LEFT JOIN category c ON p.`category_id` = c.`cid`;
+
+#2.基于上面的查询语句,创建一张视图
+CREATE VIEW products_category_view
+AS SELECT * FROM products p LEFT JOIN category c ON p.`category_id` = c.`cid`;
+```
+
+
+
+查询视图 ,**当做一张*只读* 的表**操作就可以  
+
+```
+SELECT * FROM products_category_view
+```
+
+
+
+- **通过视图进行查询  **
+
+
+
+![image-20210401140721091](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401140721091.png)
+
+
+
+- 查询各个分类下的商品平均价格  
+
+```mysql
+#通过 多表查询
+SELECT
+cname AS '分类名称',
+AVG(p.`price`) AS '平均价格'
+FROM products p LEFT JOIN category c ON p.`category_id` = c.`cid`
+GROUP BY c.`cname`;
+
+# 通过视图查询 可以省略连表的操作
+SELECT
+cname AS '分类名称',
+AVG(price) AS '平均价格'
+FROM products_category_view GROUP BY cname;
+```
+
+**通过视图查询 可以省略连表的操作**
+
+
+
+
+
+
+
+- 查询鞋服分类下最贵的商品的全部信息  
+
+```mysql
+#通过连表查询
+
+#1.先求出鞋服分类下的最高商品价格
+SELECT
+MAX(price) AS maxPrice
+FROM
+products p LEFT JOIN category c ON p.`category_id` = c.`cid`
+WHERE c.`cname` = '鞋服'
+
+#2.将上面的查询 作为条件使用
+SELECT * FROM products p LEFT JOIN category c ON p.`category_id` = c.`cid`
+WHERE c.`cname` = '鞋服' AND p.`price` =
+(SELECT
+MAX(price) AS maxPrice
+FROM
+products p LEFT JOIN category c ON p.`category_id` = c.`cid`
+WHERE c.`cname` = '鞋服');
+
+
+
+#通过视图查询
+SELECT * FROM products_category_view pcv
+WHERE pcv.`cname` = '鞋服'
+AND pcv.`price` = (SELECT MAX(price) FROM products_category_view WHERE cname ='鞋服')
+```
+
+
+
+## 视图与表的区别  
+
+
+
+
+
+- 视图是**建立在表的基础上**，表存储数据库中的数据，而**视图只是做一个数据的展示**
+- 通过视图**不能改变表中数据**（一般情况下视图中的数据都是表中的列 经过计算得到的结果**,不允许更新**）
+- 删除视图，**表不受影响**，而**删除表，视图不再起作用**  
+
+
+
+
+
+
+
+
+
+# MySQL 存储过程  
+
+
+
+
+
+
+
+## 什么是存储过程  
+
+
+
+
+
+- MySQL 5.0 版本开始支持存储过程。
+- 存储过程（Stored Procedure）是一种在数据库中**存储复杂程序**，以便**外部程序调用**的一种数据库对象。存储过程是为了完成特定功能的**SQL语句集**，经编译创建并**保存在数据库**中，用户可通过指定存储过程的名字并给定参数(需要时)来调用执行。  
+
+
+
+**简单理解: 存储过程其实就是一堆 SQL 语句的合并。中间加入了一些逻辑控制。  **
+
+
+
+
+
+## 存储过程的优缺点  
+
+
+
+优点:
+
+- 存储过程一旦调试完成后，就可以稳定运行，（前提是，业务需求要相对稳定，没有变化）
+- 存储过程**减少业务系统与数据库的交互**，降低耦合，**数据库交互更加快捷**（应用服务器，与数据库服务器不在同一个地区）
+
+缺点:
+
+- 在互联网行业中，大量使用MySQL，MySQL的存储过程与Oracle的相比较弱，所以**较少使用**，并且互联网行业需求变化较快也是原因之一
+- 尽量在简单的逻辑中使用，**存储过程移植十分困难**，数据库集群环境，保证各个库之间存储
+  过程变更一致也十分困难。
+- 阿里的代码规范里也提出了禁止使用存储过程，存储过程维护起来的确麻烦；  
+
+![image-20210401142148423](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401142148423.png)
+
+
+
+
+
+## 存储过程的创建方式  
+
+
+
+### 方式1  
+
+
+
+创建商品表 与 订单表  
+
+
+
+```mysql
+# 商品表
+CREATE TABLE goods(
+gid INT,
+NAME VARCHAR(20),
+num INT -- 库存
+);
+
+#订单表
+CREATE TABLE orders(
+oid INT,
+gid INT,
+price INT -- 订单价格
+);
+
+# 向商品表中添加3条数据
+INSERT INTO goods VALUES(1,'奶茶',20);
+INSERT INTO goods VALUES(2,'绿茶',100);
+INSERT INTO goods VALUES(3,'花茶',25);
+```
+
+
+
+创建简单的存储过程  
+
+```mysql
+DELIMITER $$ -- 声明语句结束符，可以自定义 一般使用$$
+CREATE PROCEDURE 过程名称() -- 声明存储过程
+BEGIN -- 开始编写存储过程
+	-- 要执行的操作
+END $$ -- 存储过程结束
+```
+
+
+
+编写存储过程, 查询所有商品数据  
+
+```mysql
+DELIMITER $$
+CREATE PROCEDURE goods_proc()
+BEGIN
+	select * from goods;
+END $$
+```
+
+
+
+调用存储过程  
+
+```mysql
+-- 调用存储过程 查询goods表所有数据
+call goods_proc;
+```
+
+![image-20210401143333054](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401143333054.png)
+
+其实就是个函数
+
+
+
+### 方式2  
+
+
+
+IN 输入参数：表示**调用者向存储过程传入值**  
+
+```
+CREATE PROCEDURE 存储过程名称(IN 参数名 参数类型)
+```
+
+
+
+创建接收参数的存储过程  
+
+接收一个商品id, 根据id删除数据  
+
+```mysql
+DELIMITER $$
+
+CREATE PROCEDURE goods_proc02(IN goods_id INT)
+BEGIN
+	DELETE FROM goods WHERE gid = goods_id ;
+END $$
+```
+
+
+
+
+
+```mysql
+# 删除 id为2的商品
+CALL goods_proc02(2);
+```
+
+
+
+
+
+### 方式3  
+
+
+
+变量赋值  
+
+OUT 输出参数：表示存储过程向调用者传出值  
+
+
+
+向订单表 插入一条数据, **返回1,表示插入成功**  
+
+```mysql
+# 创建存储过程 接收参数插入数据, 并返回受影响的行数
+DELIMITER $$
+CREATE PROCEDURE orders_proc(IN o_oid INT , IN o_gid INT ,IN o_price INT, OUT out_num INT)
+BEGIN
+    -- 执行插入操作
+    INSERT INTO orders VALUES(o_oid,o_gid,o_price);
+    -- 设置 num的值为 1
+    SET @out_num = 1;
+    -- 返回 out_num的值
+    SELECT @out_num;
+END $$
+```
+
+
+
+```mysql
+# 调用存储过程插入数据,获取返回值
+CALL orders_proc(1,2,30,@out_num);
+```
+
+
+
+
+
+
+
+# MySQL触发器  
+
+
+
+## 什么是触发器  
+
+
+
+触发器（trigger）是MySQL提供给程序员和数据分析员来保证数据完整性的一种方法，它是与表事件相关的特殊的存储过程，它的执行不是由程序调用，也不是手工启动，而是**由事件来触发**，**比如当对一个表进行操作（insert，delete， update）时就会激活它执行。**  
+
+
+
+**简单理解: 当我们执行一条sql语句的时候，这条sql语句的执行会自动去触发执行其他的sql语句。  **
+
+
+
+
+
+**触发器创建的四个要素  **
+
+1. 监视地点（table）表
+2. 监视事件（insert/update/delete）操作
+3. 触发时间（before/after）时间
+4. 触发事件（insert/update/delete） 操作
+
+
+
+
+
+## 创建触发器  
+
+
+
+
+
+```mysql
+delimiter $ -- 将Mysql的结束符号从 ; 改为 $,避免执行出现错误
+CREATE TRIGGER Trigger_Name -- 触发器名，在一个数据库中触发器名是唯一的
+before/after（insert/update/delete） -- 触发的时机 和 监视的事件
+on table_Name -- 触发器所在的表
+for each row -- 固定写法 叫做行触发器, 每一行受影响，触发事件都执行
+begin
+	-- begin和end之间写触发事件
+end
+$ -- 结束标记
+```
+
+
+
+
+
+需求: 在下订单的时候，对应的商品的库存量要相应的减少，卖出商品之后减少库存量。  
+
+
+
+```mysql
+-- 1.修改结束标识
+DELIMITER $
+-- 2.创建触发器
+CREATE TRIGGER t1
+-- 3.指定触发的时机,和要监听的表
+AFTER INSERT 
+ON orders
+-- 4.行触发器 固定写法
+FOR EACH ROW
+-- 4.触发后具体要执行的事件
+BEGIN
+    -- 订单+1 库存-1
+    UPDATE goods SET num = num -1 WHERE gid = 1;
+END$
+```
+
+
+
+向订单表中添加一条数据  
+
+```mysql
+INSERT INTO orders VALUES(1,1,25);
+```
+
+![image-20210401150352138](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401150352138.png)
+
+goods表中的数据随之 -1  
+
+
+
+
+
+
+
+# DCL(数据控制语言)  
+
+
+
+
+
+MySql默认使用的都是 **root 用户**，超级管理员，拥有**全部的权限**。除了root用户以外，我们还可以通过DCL语言来**定义一些权限较小的用户,** 分配**不同的权限**来管理和维护数据库。  
+
+
+
+
+
+## 创建用户  
+
+
+
+```
+CREATE USER '用户名'@'主机名' IDENTIFIED BY '密码';
+```
+
+| 参数   | 说明                                                         |
+| ------ | ------------------------------------------------------------ |
+| 用户名 | 创建的新用户,登录名称                                        |
+| 主机名 | 指定该用户**在哪个主机上可以登陆**，本地用户可用 localhost 如果想让该用户可以 **从任意远程主机登陆**，可以**使用通配符 %** |
+| 密码   | 登录密码                                                     |
+
+
+
+创建 admin1 用户，只能在 localhost 这个服务器登录 mysql 服务器，密码为 123456  
+
+```
+CREATE USER 'admin1'@'localhost' IDENTIFIED BY '123456';
+```
+
+
+
+创建的用户在名字为 mysql的 数据库中的 user表中  
+
+![image-20210401182522515](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401182522515.png)
+
+
+
+创建 admin2 用户可以在任何电脑上登录 mysql 服务器，密码为 123456  
+
+```
+CREATE USER 'admin2'@'%' IDENTIFIED BY '123456';
+```
+
+**% 表示 用户可以在任意电脑登录 mysql服务器**  
+
+
+
+
+
+## 用户授权  
+
+
+
+创建好的用户,需要进行授权  
+
+```
+GRANT 权限 1, 权限 2... ON 数据库名.表名 TO '用户名'@'主机名';
+```
+
+
+
+| 参数 | 说明                                                         |
+| ---- | ------------------------------------------------------------ |
+| 权限 | 授予用户的权限，如 CREATE、ALTER、SELECT、INSERT、UPDATE 等。 如果要授 予所有的权限则使用 ALL |
+| ON   | 用来指定权限针对哪些库和表。                                 |
+| TO   | 表示将权限赋予某个用户。                                     |
+
+
+
+给 admin1 用户分配对 **db4 数据库中 products 表**的 操作权限：**查询**  
+
+```
+GRANT SELECT ON db4.goods TO 'admin1'@'localhost';
+```
+
+![image-20210401183156373](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401183156373.png)
+
+发现admin1只能看到db4的goods表，其他都看不到
+
+**只有select权限，不能修改**
+
+![image-20210401183229340](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401183229340.png)
+
+
+
+
+
+给 admin2 用户分配**所有权限**，对所有数据库的**所有表**  
+
+```
+GRANT ALL ON *.* TO 'admin2'@'%';
+```
+
+
+
+## 查看权限  
+
+```
+SHOW GRANTS FOR '用户名'@'主机名';
+
+-- 查看root用户的权限
+SHOW GRANTS FOR 'root'@'localhost';
+```
+
+
+
+
+
+## 删除用户  
+
+
+
+```
+-- 删除 admin1 用户
+DROP USER 'admin1'@'localhost';  
+
+
+```
+
+
+
+
+
+## 查询用户
+
+
+
+选择名为 mysql的数据库, 直接查询 user表即可  
+
+```
+-- 查询用户
+SELECT * FROM USER;
+```
+
+
+
+
+
+
+
+# 数据库备份&还原  
+
+
+
+
+
+进入到Mysql安装目录的 bin目录下, 打开命令行  
+
+```
+mysqldump -uroot -p db4 > D:/db4.sql
+```
+
+![image-20210401185852359](../picture/MySQL%E5%9F%BA%E7%A1%80/image-20210401185852359.png)
+
+恢复数据 还原 db4 数据库中的数据
+
+**没有创建数据库的操作，需要手动创建后再恢复**
+
+注意：还原的时候需要先创建一个 db4数据库  
+
+```
+mysql> source sql文件地址
+```
 
 
 
