@@ -832,7 +832,7 @@ import:给容器中自动创建出这两个类型的组件,默认组件的名字
 
 
 
-条件装配：满足COnditional指定的条件，则进行组件注入
+条件装配：满足Conditional指定的条件，则进行组件注入
 
 
 
@@ -8740,7 +8740,7 @@ public void insert(City city);
 
 
 
-
+----
 
 **最佳实战：**
 

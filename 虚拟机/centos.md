@@ -253,7 +253,7 @@ vim /var/log/mysqld.log  中搜索
 
 l;ZlyZ?JL2%A
 
-
+?NnpUW&x*9Ac
 
 进入数据库：
 
@@ -272,8 +272,6 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY 'new password';
 
 
 
-
---
 
 
 
