@@ -537,8 +537,8 @@ https://www.rabbitmq.com/getstarted.html
 
 5种消息模型，大体分为两类：
 
-- 1和2属于**点对点**
-- 3,4,5 属于**发布订阅**模式（一对多）
+- 1和2属于**点对点=>P2P**
+- 3,4,5 属于**发布/订阅 Pub/Sub**模式（一对多）
 
 
 
@@ -1652,7 +1652,6 @@ channel.queueDeclare("test_exchange_topic_queue_1", true, false, false, null);
 
 
 > 如果预先创建了非持久化的队列2，那么无法再次创建持久化的队列2，需要先删除再进行创建
->
 
 
 

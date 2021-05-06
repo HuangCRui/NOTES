@@ -358,6 +358,8 @@ RPC两个核心模块：**通讯（socket）， 序列化**，动态代理.....
 
 
 
+
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
@@ -477,14 +479,14 @@ pom依赖与服务方一致，只需要将配置文件中的端口改为8081
 
 ### 接口
 
-**包名和类名需要和服务提供方相同**
+**包名和类名需要和服务提供方相同！！！**
 
 ```java
 package com.example.service;
 
 public interface HelloService {
 
-    //声明而已，具体实现会远程调用dubbo-server的实现类
+    //只是个声明，具体实现会远程调用dubbo-server的实现类
     String sayHello(String name);
 }
 ```
@@ -501,7 +503,7 @@ public interface HelloService {
 @Controller
 public class HelloAction {
 
-    //不能自动注入autowired
+    //不能使用自动注入autowired
     @Reference//远程去服务方将service的实现类注入进来
     private HelloService helloService;
 
@@ -708,7 +710,7 @@ Dubbo 缺省会在启动时**检查依赖的服务是否可用**，**不可用�
 
 
 
-**添加日志文件;og4j.properties**
+**添加日志文件log4j.properties**
 
 可以看到输出：
 
@@ -769,7 +771,7 @@ public class HelloServiceImpl implements HelloService {
 
 
 
-在消费者调用服务方法的时候，被睡了4秒，服务端认为网络延迟导致超时，抛出异常。
+在消费者调用服务方法的时候，睡了4秒，服务端认为网络延迟导致超时，抛出异常。
 
 
 
@@ -777,7 +779,7 @@ public class HelloServiceImpl implements HelloService {
 
 **配置原则：**
 
-- dubbo推荐**在Provider上**尽量**多配置COnsumer端属性**
+- dubbo推荐**在Provider上**尽量**多配置Consumer端属性**
   - 作为服务的**提供者**，比服务使用方**更清楚服务性能参数**，如调用的超时时间，合理的重试次数等等
   - 在Provider配置后，Consumer不配置则会使用Provider的配置值，即Provider配置可以**作为消费者的缺省值**
 
@@ -847,7 +849,7 @@ public String sayNo() throws InterruptedException {
 ```xml
 <!--    相当于@Reference 来注入到容器中-->
     <dubbo:reference interface="com.example.service.HelloService" id="helloService">
-        <dubbo:method name="sayHello" retries="3"/>
+        <dubbo:method name="sayHello" retries="3"/> 重试四次
         <dubbo:method name="sayNo" retries="0"/> 不重试
     </dubbo:reference>
 ```
@@ -857,8 +859,7 @@ public String sayNo() throws InterruptedException {
 直接@autowired注入就行
 
 ```java
-//不能自动注入autowired
-//@Reference//远程去服务方将service的实现类注入进来
+//配置文件中使用dubbo:method  配置到了容器中，直接注入就行
 @Autowired
 private HelloService helloService;
 ```
@@ -944,7 +945,7 @@ consumer中选择版本号进行调用：
 
 
 - 目前我们的分布式架构搭建起来有一个严重的问题，就是好所有的操作全都是 **消费者发起，由服务提供者执行**
-- 消费者什么也不干，只管调用；而服务提供者很累。。例如简单的参数验证，消费者完全能够胜任，把合法的参数再发送给提供者执行，效率高了，提供者也没那么累了
+- 消费者什么也不干，只管调用；而服务提供者很累。。例如**简单的参数验证，消费者完全能够胜任**，把合法的参数再发送给提供者执行，***效率高了，提供者也没那么累了***
 - 例如：去房产局办理房屋过户，带好自己的证件和资料，如果什么都不带，那么办理过户的手续会很麻烦，需要先调查你有什么贷款、有没有抵押、复印资料等操作。如果都准备好，很快就可以办完
 - **先在消费者处理一些业务逻辑，再调用提供者的过程，就是本地存根**
 - 在消费者中，创建一个HElloServiceStub类并实现HelloService接口
@@ -958,8 +959,8 @@ consumer中选择版本号进行调用：
 
 
 ```xml
-<!--    相当于@Reference 来注入到容器中-->
-    <dubbo:reference interface="com.example.service.HelloService" id="helloService" version="2.0.0" stub="com.example.stub.HelloServiceStub">
+<!--    相当于@Reference 来注入到容器中  指定存根的service实现类-->
+    <dubbo:reference interface="com.example.service.HelloService" id="helloService" version="2.0.0" stub="com.example.stub.HelloServiceStub">  
     </dubbo:reference>
 ```
 
@@ -970,7 +971,7 @@ public class HelloServiceStub implements HelloService {
     //本地存根必须以构造方法的方式注入
     private HelloService helloService;//HelloService的代理对象
 
-    //从容器中获得参数
+    //从容器中获得参数，必须构造注入
     public HelloServiceStub(HelloService helloService) {
         this.helloService = helloService;
     }
@@ -978,6 +979,7 @@ public class HelloServiceStub implements HelloService {
 
     @Override
     public String sayHello(String name) {
+        //本地存根验证
         if(StringUtils.hasLength(name)){
             return helloService.sayHello(name);
         }
@@ -1037,20 +1039,20 @@ public class HelloServiceStub implements HelloService {
 
 ---
 
-- **最少活跃调用数**，相同活跃数的随机，活跃数指调用前后计数差。
+- **最少活跃调用数**，相同活跃数的随机，活跃数指调用前后**计数时间差**。
 - 使**慢的提供者收到更少请求**，因为越慢的提供者的调用前后**计数差会越大，时间长**。
 
 ---
 
 - **一致性 Hash**，相同参数的请求总是发到同一提供者。
-- 当某一台提供者挂时，原本发往该提供者的请求，基于虚拟节点，**平摊到其它提供者，不会引起剧烈变动。**
+- 当某一台提供者挂时，原本发往该提供者的请求，基于虚拟节点，**平摊到一致性hash圈上的下一个提供者，不会引起剧烈变动。**
 - 算法参见：http://en.wikipedia.org/wiki/Consistent_hashing
 - 缺省只对第一个参数 Hash，如果要修改，请配置 `<dubbo:parameter key="hash.arguments" value="0,1" />`
 - 缺省用 160 份虚拟节点，如果要修改，请配置 `<dubbo:parameter key="hash.nodes" value="320" /`
 
+↓
 
-
-能够尽可能小地改变已存在的服务请求与处理请求服务器之间的映射关系
+***能够尽可能小地改变已存在的服务请求与处理请求服务器之间的映射关系***
 
 
 
@@ -1079,7 +1081,7 @@ public class HelloServiceStub implements HelloService {
 
 在控制台运行：
 
-**可以在dubbo-管理中看到一个服务HelloService’具有三个提供者，也就是三台服务器提供同一个服务**
+**可以在dubbo管理中看到一个服务HelloService’具有三个提供者，也就是三台服务器提供同一个服务**
 
 ![image-20210304110138304](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210304110138304.png)
 
@@ -1103,7 +1105,9 @@ public class HelloServiceStub implements HelloService {
 
 轮询：
 
-```
+ `loadbalance="roundrobin"`
+
+```xml
 <dubbo:reference loadbalance="roundrobin" interface="com.example.service.HelloService" id="helloService" version="2.0.0" stub="com.example.stub.HelloServiceStub">
 ```
 
@@ -1145,7 +1149,7 @@ public class HelloServiceStub implements HelloService {
 
 
 
-zookeeper注册中心宕机，还可以消费dubbo暴露的服务
+zookeeper注册中心宕机，***<u>还可以消费 dubbo 暴露的服务</u>***
 
 - 监控中心宕掉不影响使用，只是丢失部分采样数据
 - 数据库宕掉后，注册中心仍能通过缓存**提供服务列表查询**，**但不能注册-新-服务**
@@ -1198,7 +1202,7 @@ zookeeper注册中心宕机，还可以消费dubbo暴露的服务
 
 
 
-- 庇护遇到危险会自己脱落尾巴，目的是丧尸不重要的东西，保住重要的
+- 庇护遇到危险会自己脱落尾巴，目的是丢弃不重要的东西，保住重要的
 - 服务降级，就是**根据实际的情况和流量**，对一些服务有策略的**停止**或换种**简单**的方式处理，从而**释放服务器的资源来保证核心业务的正常运行**
 
 
@@ -1211,7 +1215,7 @@ zookeeper注册中心宕机，还可以消费dubbo暴露的服务
 
 为什么要使用服务降级，这是防止分布式服务发生 **雪崩效应**
 
-- 雪崩：就是蝴蝶效应，当一个请求发生超时，一直等待着服务响应，那么在高并发情况下，很多请求都是因为这样**一直等着响应**，直到**服务资源耗尽-产生宕机**，而宕机之后导致分布式其他服务**调用该宕机的服务**也会出现资源耗尽**宕机**，这样下去将导致**整个分布式服务都瘫痪**，这就是"雪崩"
+- 雪崩：当一个请求发生超时，一直等待着服务响应，那么在高并发情况下，很多请求都是因为这样**一直等着响应**，直到**服务资源耗尽-产生宕机**，而宕机之后导致分布式其他服务**调用该宕机的服务**也会出现资源耗尽**宕机（整个调用链都无法使用）**，这样下去将导致**整个分布式服务都瘫痪**，这就是"雪崩"
 
 
 
@@ -1483,9 +1487,7 @@ Zookeeper节点中：
 
 ![image-20210303170649530](../picture/Dubbo%E8%AF%A6%E8%A7%A3/image-20210303170649530.png)
 
-
-
-
+如何让他们在zoo中保持名称相同呢？
 
 > **消费接口要和提供方接口一样，包名，方法名也要一样**
 
