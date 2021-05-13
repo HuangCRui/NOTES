@@ -1339,7 +1339,6 @@ public static void main(String[] args) throws IOException {
 #### 多路复用
 
 > 单线程可以配合 **Selector** 完成对**多个 Channel 可读写事件的监控**，这称之为**多路复用**
->
 
 * 多路复用**<u>仅针对网络 IO</u>**、普通文件 IO 没法利用多路复用
 * 如果不用 Selector 的非阻塞模式，线程大部分时间都在做无用功，而 Selector 能够保证
@@ -2422,9 +2421,9 @@ socket.getOutputStream().write(buf);
 
    > ***DMA 也可以理解为硬件单元，用来解放 cpu 完成文件 IO***
 
-2. 从**内核态**切换回**用户态**，将数据从**内核缓冲区**读入**用户缓冲区**（即 byte[] buf），这期间 cpu 会参与拷贝，无法利用 DMA
+2. 从**内核态**切换回**用户态**，将数据从**内核缓冲区**读入**用户缓冲区**（即 byte[] buf），这期间 **cpu 会参与拷贝**，无法利用 DMA
 
-3. 调用 write 方法，这时将数据从**用户缓冲区**（byte[] buf）写入 **socket 缓冲区**，cpu 会参与拷贝
+3. 调用 write 方法，这时将数据从**用户缓冲区**（byte[] buf）写入 **socket 缓冲区**，**cpu 会参与拷贝**
 
 4. 接下来要**向网卡写数据**，这项能力 java 又不具备，因此又得从**用户态**切换至**内核态**，调用操作系统的写能力，使用 DMA 将 **socket 缓冲区**的数据写入网卡，不会使用 cpu
 
@@ -2460,7 +2459,7 @@ socket.getOutputStream().write(buf);
 
 ---
 
-进一步优化（底层采用了 linux 2.1 后提供的 `sendFile` 方法），java 中对应着两个 channel 调用 `transferTo/transferFrom` 方法拷贝数据
+进一步优化（底层采用了 linux 2.1 后提供的 **`sendFile`** 方法），java 中对应着两个 channel 调用 **`transferTo/transferFrom`** 方法拷贝数据（filechannel 文件传输）
 
 ![image-20210501154206828](../picture/Netty/image-20210501154206828.png)
 
@@ -2884,7 +2883,7 @@ public class HelloClient {
 
 EventLoop 本质是一个**单线程执行器**（同时维护了一个 **Selector**），里面有 run 方法处理 ——> ***Channel 上源源不断的 io 事件***
 
-它的继承关系比较复杂
+它的继承关系比较复杂：
 
 * 一条线是继承自 j.u.c.ScheduledExecutorService 因此包含了**线程池中所有的方法**，执行定时任务的线程池
 * 另一条线是继承自 netty 自己的 OrderedEventExecutor，**有序的**
@@ -2970,7 +2969,7 @@ NIO的线程被暂停了，debug时只暂停当前main线程即可
 
 ![image-20210501184758899](../picture/Netty/image-20210501184758899.png)
 
-同一个服务器线程（eventloop）来处理这个channel
+还是同一个服务器线程（eventloop）来处理这个channel
 
 ![image-20210501185001439](../picture/Netty/image-20210501185001439.png)
 
@@ -2998,7 +2997,7 @@ NIO的线程被暂停了，debug时只暂停当前main线程即可
 public class EventLoopServer {
 
     public static void main(String[] args) {
-        //细分2：创建一个独立的eventloopgroup
+        //细分2：创建一个独立的eventloopgroup来处理指定的一个handler，会在nio线程和普通线程间发生线程切换，传递任务
         EventLoopGroup group = new DefaultEventLoopGroup();
 
         new ServerBootstrap()
@@ -3055,7 +3054,8 @@ nio线程和普通线程之间切换
 static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
     final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
     // 下一个 handler 的事件循环是否与当前的事件循环是同一个线程
-    //next.executor()返回下一个handler的eventloop（此处nio线程的next就是普通线程）
+    
+    //next.executor()返回下一个handler的eventloop（此处nio线程的next就是普通线程DefaultEventLoop）
     EventExecutor executor = next.executor();
     
     // 是同一个线程，直接调用
@@ -3090,7 +3090,7 @@ static void invokeChannelRead(final AbstractChannelHandlerContext next, Object m
 ctx.fireChannelRead(msg); //将消息传递给下一个handler
 
 /*
-↓不是同一个线程，需要调用↑的方法，来传递给下一个handler处理（如果是同一个线程，可能不需要吧？）
+↓不是同一个线程，需要调用↑的方法，来传递给下一个handler处理（如果是同一个线程，也需要传递任务，只不过在这里面不需要切换线程了）
 */
 
 @Override
@@ -4362,7 +4362,7 @@ class io.netty.buffer.CompositeByteBuf
 
 #### 💡 ByteBuf 优势
 
-* **池化** - 可以重用池中 ByteBuf 实例，更节约内存，减少内存溢出的可能
+* **池化** - 可以重用池中 ByteBuf 实例，更**节约内存**，减少内存溢出的可能
 * **读写指针分离**，不需要像 ByteBuffer 一样切换读写模式
 * 可以**自动扩容**
 * 支持**链式调用**，使用更流畅：`buf.writeBytes(buf1).writeBytes(buf2)`
@@ -4537,6 +4537,126 @@ public class TestClient {
 
 
 # Netty 进阶
+
+
+
+
+
+
+
+## 零拷贝的实现原理
+
+
+
+伪代码：
+
+```java
+File.read(file, buf, len);
+Socket.send(socket, buf, len);
+```
+
+这种方式一共涉及4次数据拷贝
+
+![img](../picture/Netty/2184951-730b2ba2fb35256a.png)
+
+
+
+1、应用程序中调用`read()` 方法，这里会涉及到一次上下文切换（**用户态->内核态**），底层采用**DMA**（direct memory access）读取磁盘的文件，并把内容存储到内核地址空间的**读取缓存区**。
+
+2、由于应用程序无法读取内核地址空间的数据，如果应用程序要操作这些数据，必须把这些内容**从读取缓冲区拷贝到用户缓冲区**。这个时候，`read()` 调用返回，且引发一次上下文切换（**内核态->用户态**），现在数据已经被拷贝到了用户地址空间缓冲区，这时，如果有需要，应用程序可以操作修改这些内容。
+
+3、我们最终目的是把这个文件内容通过Socket传到另一个服务中，调用Socket的`send()`方法，这里又涉及到一次上下文切换（用户态->内核态），同时，文件内容被进行第三次拷贝，**被再次拷贝到内核地址空间缓冲区**，但是这次的缓冲区**与目标套接字相关联**，与读取缓冲区没有半点关系。
+
+4、`send()`调用返回，引发第四次的上下文切换，同时进行**第四次的数据拷贝**，通过DMA**把数据从目标套接字相关的缓存区传到协议引擎进行发送。**
+
+在整个过程中，过程1和4是由DMA负责，并不会消耗CPU，只有过程2和3的拷贝需要CPU参与
+
+
+
+----
+
+如果在应用程序中，不需要操作内容，过程2和3就是多余的，如果可以直接把内核态**读取缓存冲区数据直接拷贝到套接字相关的缓存区**，是不是可以达到优化的目的？
+
+![img](../picture/Netty/2184951-21458487f46d6201.png)
+
+这种实现，可以有以下几点改进：
+
+- 上下文切换的次数从四次减少到了**一次**
+- 数据拷贝次数从四次减少到了三次（其中DMA copy 2次，CPU copy 1次）
+
+"怎么实现？"
+
+"在Java中，正好FileChannel的transferTo() 方法可以实现这个过程，该方法**将数据从文件通道传输到给定的可写字节通道**， 上面的`file.read()`和 `socket.send()` 调用动作可以替换为 `transferTo()` 调用"
+
+```cpp
+public void transferTo(long position, long count, WritableByteChannel target);
+```
+
+
+
+在 UNIX 和各种 Linux 系统中，此调用被传递到 `sendfile()` **系统调用**中，最终实现**将数据从一个文件描述符传输到了另一个文件描述符。**
+
+
+
+如果底层网络接口卡支持收集操作的话，就可以进一步的优化。
+
+在 Linux 内核 2.4 及后期版本中，针对套接字缓冲区描述符做了相应调整，**DMA自带了收集功能**，对于用户方面，用法还是一样的，但是内部操作已经发生了改变：
+
+![img](../picture/Netty/2184951-0e7ff381221f976d.png)
+
+第一步，transferTo() 方法引发 DMA 将文件内容拷贝到内核读取缓冲区。
+
+第二步，把包含数据位置和长度信息的描述符追加到套接字缓冲区，避免了内容整体的拷贝，DMA 引擎**直接把数据从内核缓冲区传到协议引擎**，从而**消除了最后一次 CPU参与的拷贝动作**。
+
+
+
+**零拷贝：零次CPU参与的拷贝，都是使用的DMA来进行拷贝**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Netty的零拷贝
+
+
+
+Netty的“零拷贝”主要体现在如下三个方面：
+
+
+
+> 1. Netty的接收和发送ByteBuffer采用**DIRECT BUFFERS**，使用**堆外直接内存**进行Socket读写，不需要进行字节缓冲区的二次拷贝。如果使用传统的堆内存（HEAP BUFFERS）进行Socket读写，JVM会**将堆内存Buffer拷贝一份到直接内存中，然后才写入Socket中**。相比于堆外直接内存，消息在发送过程中多了一次缓冲区的内存拷贝。
+> 2. Netty提供了组合Buffer对象，可以**聚合多个ByteBuffer对象**，用户可以像操作一个Buffer那样方便的对组合Buffer进行操作，避免了传统通过内存拷贝的方式将几个小Buffer合并成一个大的Buffer。也可以使用slice等利用零拷贝的原理进行bytebuf的切分
+> 3. Netty的文件传输采用了transferTo方法，它可以**直接将文件缓冲区的数据发送到目标Channel**，避免了传统通过循环write方式导致的内存拷贝问题。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## 粘包与半包
 
@@ -5892,6 +6012,530 @@ java.net.SocketTimeoutException: connect timed out
 
 
 
+
+
+
+
+
+# IO多路复用
+
+
+
+传统的阻塞 IO：
+
+![image-20210510160110401](../picture/Netty/image-20210510160110401.png)
+
+
+
+所以，如果这个**连接的客户端(已连接成功)**一直不发数据，那么服务端线程将会一直**阻塞在 read 函数**上不返回，也无法接受其他客户端连接。
+
+这肯定是不行的。
+
+
+
+---
+
+非阻塞的IO
+
+关键在于改造这个 read 函数。
+
+有一种聪明的办法是，**每次都创建一个新的进程或线程**，去调用 read 函数，并做业务处理。
+
+```c
+while(1) {
+  connfd = accept(listenfd);  // 阻塞建立连接
+  pthread_create（doWork);  // 创建一个新的线程
+}
+void doWork() {
+  int n = read(connfd, buf);  // 阻塞读数据
+  doSomeThing(buf);  // 利用读到的数据做些什么
+  close(connfd);     // 关闭连接，循环等待下一个连接
+}
+```
+
+这样，当给一个客户端建立好连接后，就可以**立刻等待新的客户端连接**，而**不用阻塞在原客户端的 read 请求上**。
+
+![图片](https://mmbiz.qpic.cn/mmbiz_gif/GLeh42uInXTyY80RSpUTLjIMiaGGicv9zA55fIbicSuYiad7vYdyLD0usibPibYiaAjBDR0gQPzArnzYlWXOZRyQzub3Q/640?wx_fmt=gif&tp=webp&wxfrom=5&wx_lazy=1)
+
+不过，这不叫非阻塞 IO，只不过用了多线程的手段使得主线程没有**卡在 read 函数上不往下走**罢了。操作系统为我们提供的 read 函数仍然是阻塞的。
+
+
+
+----
+
+所以真正的非阻塞 IO，不能是通过我们用户层的小把戏，**而是要恳请操作系统为我们提供一个非阻塞的 read 函数**。
+
+这个 read 函数的效果是，如果没有数据到达时（到达网卡并拷贝到了内核缓冲区），**立刻返回一个错误值（-1），而不是阻塞地等待。**
+
+> 重要的是：使read函数不阻塞，不然开启再多线程，那个**线程连接的客户端一直不发送消息**，就会一直阻塞在read处，**线程资源浪费**了！
+
+
+
+操作系统提供了这样的功能，只需要在调用 read 前，**将文件描述符设置为非阻塞即可**。
+
+这样，就需要用户线程循环调用 read，直到返回值不为 -1，再开始处理业务。
+
+
+
+![图片](https://mmbiz.qpic.cn/mmbiz_gif/GLeh42uInXTyY80RSpUTLjIMiaGGicv9zAT6rHhibbzK5rXiarLuJU0P4MGrHNl35vVCV4JdS4FeejOkl8bBGz9nVQ/640?wx_fmt=gif&tp=webp&wxfrom=5&wx_lazy=1)
+
+
+
+非阻塞的 read，指的是在数据到达前，即数据还未到达网卡，或者到达网卡但还没有拷贝到内核缓冲区之前，这个阶段是非阻塞的。
+
+当数据已到达内核缓冲区，此时调用 read 函数仍然是阻塞的，需要等待数据***从内核缓冲区拷贝到用户缓冲区，才能返回***。
+
+整体流程如下图
+
+<img src="../picture/Netty/image-20210510160000986.png" alt="image-20210510160000986" style="zoom:67%;" />
+
+
+
+
+
+----
+
+**IO 多路复用**
+
+为每个客户端创建一个线程，服务器端的线程资源很容易被耗光。
+
+<img src="../picture/Netty/image-20210510160422757.png" alt="image-20210510160422757" style="zoom:50%;" />
+
+我们可以每 **accept 一个客户端连接**后，将这个**文件描述符（connfd）放到一个数组**里。
+
+
+
+然后弄***一个新的线程***  去不断**遍历这个数组**，**调用每一个元素的非阻塞 read 方法**。
+
+```c
+while(1) {
+  for(fd <-- fdlist) {
+    if(read(fd) != -1) {
+      doSomeThing();
+    }
+  }
+}
+```
+
+这样就成功**用一个线程处理了多个客户端连接**。
+
+
+
+----
+
+你是不是觉得这有些多路复用的意思？
+
+但这和我们用多线程去将阻塞 IO 改造成看起来是非阻塞 IO 一样，这种遍历方式也只是我们用户自己想出的小把戏，**每次遍历遇到 read 返回 -1 时仍然是一次浪费资源的系统调用。**
+
+在 **while 循环里做系统调用**，就好比你做分布式项目时在 while 里做 rpc 请求一样，是不划算的。
+
+所以，还是得恳请操作系统老大，**提供给我们一个有这样效果的函数**，我们将***<u>一批文件描述符通过一次系统调用传给内核，由内核层去遍历，才能真正解决这个问题。</u>***
+
+
+
+
+
+----
+
+
+
+**select**
+
+
+
+select 是操作系统提供的**系统调用函数**，通过它，我们可以**把一个文件描述符的数组发给操作系统**， 让操作系统去遍历，**确定哪个文件描述符可以读写**， 然后告诉我们去处理：
+
+![图片](https://mmbiz.qpic.cn/mmbiz_gif/GLeh42uInXTyY80RSpUTLjIMiaGGicv9zAicgy5qFYcyoWPAV31k82icRe6I4Lya2F9qWcBlhHv3kzpgt9yjD7Hnpw/640?wx_fmt=gif&tp=webp&wxfrom=5&wx_lazy=1)
+
+select系统调用的函数定义如下。
+
+```c
+int select(
+    int nfds,
+    fd_set *readfds,
+    fd_set *writefds,
+    fd_set *exceptfds,
+    struct timeval *timeout);
+// nfds:监控的文件描述符集里最大文件描述符加1
+// readfds：监控有读数据到达文件描述符集合，传入传出参数
+// writefds：监控写数据到达文件描述符集合，传入传出参数
+// exceptfds：监控异常发生达文件描述符集合, 传入传出参数
+// timeout：定时阻塞监控时间，3种情况
+//  1.NULL，永远等下去
+//  2.设置timeval，等待固定时间
+//  3.设置timeval里时间均为0，检查描述字后立即返回，轮询
+```
+
+服务端代码，这样来写。
+
+首先**一个线程不断接受客户端连接**，
+
+并**把 socket 文件描述符放到一个 list 里**。
+
+
+
+```c
+while(1) {
+  connfd = accept(listenfd);
+  fcntl(connfd, F_SETFL, O_NONBLOCK);
+  fdlist.add(connfd);
+}
+```
+
+然后，另一个线程不再自己遍历，而是调用 select，将这批文件描述符 list 交给操作系统去遍历。
+
+```c
+while(1) {
+  // 把一堆文件描述符 list 传给 select 函数
+  // 有已就绪的文件描述符就返回，nready 表示有多少个就绪的
+  nready = select(list);
+  ...
+}
+```
+
+不过，当 select 函数返回后，用户依然需要遍历刚刚提交给操作系统的 list。
+
+只不过，操作系统会将准备就绪的文件描述符做上标识，用户层将不会再有无意义的系统调用开销。
+
+```c
+while(1) {
+    //需要阻塞等待结果
+  nready = select(list);
+  // 用户层依然要遍历，只不过少了很多无效的系统调用
+  for(fd <-- fdlist) {
+    if(fd != -1) {
+      // 只读已就绪的文件描述符
+      read(fd, buf);
+      // 总共只有 nready 个已就绪描述符，不用过多遍历
+      if(--nready == 0) break;
+    }
+  }
+}
+```
+
+最终是这个效果：
+
+![图片](https://mmbiz.qpic.cn/mmbiz_gif/GLeh42uInXTyY80RSpUTLjIMiaGGicv9zAicgy5qFYcyoWPAV31k82icRe6I4Lya2F9qWcBlhHv3kzpgt9yjD7Hnpw/640?wx_fmt=gif&tp=webp&wxfrom=5&wx_lazy=1)
+
+
+
+
+
+可以看出几个细节：
+
+1. select 调用需要传入 fd 数组，需要**拷贝一份到内核**，高并发场景下这样的拷贝消耗的资源是惊人的。**（可优化为不复制）**
+
+2. select 在内核层仍然是通过遍历的方式**检查文件描述符的就绪状态**，是个同步过程，只不过**无系统调用切换上下文的开销**。**（内核层可优化为异步事件通知）**
+
+3. select 仅仅返回可读文件描述符的个数，**具体哪个可读还是要用户自己遍历**。（**可优化为只返回给用户就绪的文件描述符，无需用户做无效的遍历）**
+
+
+
+
+
+<img src="../picture/Netty/image-20210510173559333.png" alt="image-20210510173559333" style="zoom:50%;" />
+
+
+
+可以看到，这种方式，既做到了***<u>一个线程处理多个客户端连接（文件描述符）</u>***，又减少了**系统调用的开销**（多个文件描述符只有一次 select 的系统调用 + n 次**就绪状态的文件描述符的 read 系统调用**）。
+
+
+
+----
+
+**poll**
+
+ 
+
+poll 也是操作系统提供的系统调用函数。
+
+它和 select 的主要区别就是，去掉了 select 只能监听 1024 个文件描述符的限制。
+
+
+
+----
+
+
+
+**epoll**
+
+epoll 是最终的大 boss，它解决了 select 和 poll 的一些问题。
+
+
+
+还记得上面说的 select 的三个细节么？
+
+1. select 调用需要传入 fd 数组，需要拷贝一份到内核，高并发场景下这样的拷贝消耗的资源是惊人的。**（可优化为不复制）**
+
+2. select 在内核层仍然是通过遍历的方式检查文件描述符的就绪状态，是个同步过程，只不过无系统调用切换上下文的开销。（内核层可优化为**异步事件通知**）
+
+3. select 仅仅返回可读文件描述符的个数，具体哪个可读还是要用户自己遍历。（可优化为只返回给用户就绪的文件描述符，无需用户做**无效的遍历**）
+
+
+
+所以 epoll 主要就是针对这三点进行了改进。
+
+1. 内核中保存一份文件描述符集合，**无需用户每次都重新传入**，只需**告诉内核修改的部分即可**。
+
+2. 内核不再通过***轮询***  的方式找到就绪的文件描述符，而是**通过异步 IO 事件<u>唤醒</u>**。来了事件就返回对应的文件描述符，不需要再去轮询所有的文件描述符来发现是否有事件到来？
+
+3. 内核仅会将**有 IO 事件的文件描述符**返回给用户，用户也**无需遍历整个文件描述符集合**。
+
+
+
+![图片](https://mmbiz.qpic.cn/mmbiz_gif/GLeh42uInXTyY80RSpUTLjIMiaGGicv9zAjXNXJTV82eOqkbJdOrDpQpAaWiceBqvAXyFEOTdV5fC2dNsL29yBW7w/640?wx_fmt=gif&tp=webp&wxfrom=5&wx_lazy=1)
+
+
+
+
+
+----
+
+
+
+一切的开始，都起源于这个 read 函数是操作系统提供的，而且是阻塞的，我们叫它 **阻塞 IO**。
+
+为了破这个局，程序员在**用户态通过多线程**来防止主线程卡死。
+
+后来操作系统发现这个需求比较大，于是在操作系统层面提供了**非阻塞的 read 函数**，这样程序员就可以在一个线程内完成多个文件描述符的读取，这就是 **非阻塞 IO**。
+
+但多个文件描述符的读取就需要遍历，当高并发场景越来越多时，用户态遍历的文件描述符也越来越多，相当于在 **while 循环里进行了越来越多的系统调用。**
+
+后来操作系统又发现这个场景需求量较大，于是又在**操作系统层面提供了这样的遍历文件描述符**的机制，这就是 **IO 多路复用**。
+
+多路复用有三个函数，最开始是 select，然后又发明了 poll 解决了 select 文件描述符的限制，然后又发明了 epoll 解决 select 的三个不足。
+
+
+
+所以，IO 模型的演进，其实就是时代的变化，倒逼着操作系统将更多的功能加到自己的内核而已。
+
+如果你建立了这样的思维，很容易发现网上的一些错误。
+
+比如好多文章说，多路复用之所以效率高，是因为用一个线程就可以监控多个文件描述符。
+
+这显然是知其然而不知其所以然，多路复用产生的效果，完全可以由**用户态去遍历文件描述符并调用其非阻塞的 read 函数实现**。而多路复用快的原因在于，***操作系统提供了这样的系统调用***，使得原来的 ***while 循环里多次系统调用***，变成了***一次系统调用 + 内核层遍历这些文件描述符***。
+
+就好比我们平时写业务代码，把原来 while 循环里调 http 接口进行批量添加，改成了让对方提供一个批量添加的 http 接口，然后我们一次 rpc 请求就完成了批量添加。
+
+一个道理。
+
+
+
+
+
+
+
+# Netty线程模型
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### 事件驱动模型
+
+通常，我们设计一个事件处理模型的程序有两种思路
+
+-  **轮询方式**
+   线程不断轮询访问相关事件发生源有没有发生事件，有发生事件就调用事件处理逻辑。
+-  **事件驱动方式**
+   事件发生时**主线程**把事件放入事件队列，在**另外线程不断循环消费事件列表中的事件**，调用事件对应的处理逻辑处理事件。事件驱动方式也被称为消息通知方式，其实是设计模式中观察者模式的思路。
+
+![img](../picture/Netty/11222983-71d582050fe05761.png)
+
+主要包括4个基本组件：
+ **事件队列（event queue）：**接收事件的入口，**存储待处理事件**
+ **分发器（event mediator）：**将不同的事件分发到不同的**业务逻辑单元**
+ **事件通道（event channel）：**分发器与处理器之间的**联系渠道**
+ **事件处理器（event processor）：**实现业务逻辑，处理完成后会发出事件，**触发下一步（下一个handler）操作**
+
+可以看到，相对传统轮询模式，事件驱动有如下优点：
+ **可扩展性好**，分布式的异步架构，事件处理器之间高度解耦，可以方便扩展事件处理逻辑
+ **高性能**，基于队列暂存事件，能方便并行异步处理事件
+
+下图描述了Netty进行事件处理的流程。Channel是连接的通道，是ChannelEvent的产生者，而ChannelPipeline可以理解为ChannelHandler的集合。
+
+![img](../picture/Netty/11222983-973f17ed9994f4b8.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Reactor线程模型
+
+
+
+
+
+在 Netty 以及 NIO 出现之前，我们写 IO 应用其实用的都是用 `java.io.*` 下所提供的包。
+
+```java
+ServerSocket serverSocket = new ServerSocket(8080);
+Socket socket = serverSocket.accept() ;
+BufferReader in = .... ;
+
+String request ;
+ 
+while((request = in.readLine()) != null){
+	new Thread(new Task()).start()
+}
+```
+
+大概是这样，其实主要想表达的是：**这样一个线程只能处理一个连接**。
+
+如果是 100 个客户端连接那就得开 100 个线程，1000 那就得 1000 个线程。
+
+要知道线程资源非常宝贵，每次的**创建都会带来消耗**，而且每个线程还得为它分配对应的**栈内存**。
+
+即便是我们给 JVM 足够的内存，大量线程所带来的**上下文切换**也是受不了的。
+
+> 并且传统 IO 是**阻塞模式**，每一次的响应必须的是发起 IO 请求，处理请求完成再同时返回，直接的结果就是性能差，吞吐量低。
+
+----
+
+因此业界常用的高性能 IO 模型是 `Reactor`。
+
+它是一种**异步**、**非阻塞**的**事件驱动**模型。
+
+
+
+Reactor是反应堆的意思，Reactor模型，是指通过一个或多个输入同时传递给服务处理器的服务请求的***事件驱动处理模式***。 服务端程序处理传入多路请求，并将它们**同步分派给请求对应的处理线程**，Reactor模式也叫Dispatcher模式，即**I/O多路复用统一监听事件，收到事件后分发(Dispatch给某进程)**
+
+Reactor模型中有2个关键组成：
+
+> - Reactor
+>    Reactor在一个**单独的线程中运行**，负责**监听和分发事件**，分发给适当的处理程序来对IO事件做出反应。 它就像公司的电话接线员，它接听来自客户的电话并将线路转移到适当的联系人
+
+> - Handlers
+>    **处理程序执行I/O事件要完成的实际事件**，类似于客户想要与之交谈的公司中的实际官员。Reactor通过调度适当的处理程序来响应I/O事件，**处理程序执行非阻塞操作**
+
+Reactor模型：
+
+![img](../picture/Netty/11222983-d450a191c2c7b056.jpg)
+
+
+
+取决于Reactor的数量和Hanndler线程数量的不同，Reactor模型有3个变种
+
+> - 单Reactor单线程
+>
+>   - 由一个线程来接收客户端的连接，并将该请求分发到对应的事件处理 handler（也是单线程） 中，整个过程完全是异步非阻塞的；并且完全不存在共享资源的问题。所以理论上来说吞吐量也还不错。
+>
+> - 单Reactor多线程
+>
+>   - 最大的改进就是将原有的**事件处理改为了多线程**。利用java线程池实现，在大量请求的处理上性能提示是巨大的
+>   - but：**处理客户端连接的还是单线程**，因为大多数服务端应用或多或少在连接时都会处理一些业务，如鉴权之类的，当连接的客户端越来越多时这一个线程**依然会存在性能问题**。于是有了主从多线程
+>
+> - 主从Reactor多线程
+>
+>   - 将客户端**连接那一块的线程也改为多线程**，称为主线程。
+>
+>     同时也是**多个子线程来处理事件响应**，这样**无论是连接还是事件都是高性能的**。
+
+
+
+可以这样理解，Reactor就是一个执行`while (true) { selector.select(); … }`循环的线程，会源源不断的产生新的事件
+
+=>将收到的请求转为事件分派给对应的线程处理，称作反应堆很贴切。
+
+
+
+ Reactor详细介绍可看[理解高性能网络模型](https://www.jianshu.com/p/2965fca6bb8f)
+
+
+
+
+
+#### Netty线程模型
+
+Netty主要**基于主从Reactors多线程模型**（如下图）做了一定的修改，其中主从Reactor多线程模型有多个Reactor：**MainReactor和SubReactor：**
+
+> - MainReactor负责客户端的**连接请求**，并**将(读写等)请求转交给SubReactor**
+> - SubReactor负责***相应通道(每个channel有其固定的eventloop来处理请求)***  的IO读写请求
+> - 非IO请求（具体逻辑处理）的任务则会**直接写入队列**，等待worker threads进行处理
+
+这里引用Doug Lee大神的Reactor介绍：Scalable IO in Java里面关于主从Reactor多线程模型的图
+
+![img](../picture/Netty/11222983-49dc7425a3f67325.jpg)
+
+
+
+虽然Netty的线程模型基于**主从Reactor多线程**，借用了MainReactor和SubReactor的结构，但是实际实现上，**SubReactor和Worker线程在同一个线程池中（workerGroup负责处理所有非连接的请求事件）**：
+
+
+
+单线程模型：
+
+```java
+private EventLoopGroup group = new NioEventLoopGroup();
+ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(group)
+                .childHandler(new ChannelInitializer<SocketChannel>() {...});
+```
+
+多线程模型：
+
+```java
+private EventLoopGroup boss = new NioEventLoopGroup(1); //这里负责连接的就1个线程
+private EventLoopGroup work = new NioEventLoopGroup();
+ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(boss,work)
+                .childHandler(new ChannelInitializer<SocketChannel>() {...});
+```
+
+主从多线程：
+
+```java
+private EventLoopGroup boss = new NioEventLoopGroup(); //多线程负责连接请求
+private EventLoopGroup work = new NioEventLoopGroup();
+ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(boss,work)
+                .childHandler(new ChannelInitializer<SocketChannel>() {...});
+```
+
+
+
+上面代码中的bossGroup 和workerGroup是Bootstrap构造方法中传入的两个对象，这两个group均是线程池
+
+- bossGroup线程池则只是在bind某个端口后，获得其中一个线程作为MainReactor，**专门处理端口的accept事件**，***每个端口对应一个boss线程***
+- workerGroup线程池会被各个SubReactor和worker线程充分利用
+
+
+
+事实上，Netty的线程模型并非固定不变，通过在启动辅助类中创建不同的EventLoopGroup实例并通过适当的参数配置，就可以支持上述 三种Reactor线程模型。正是因为Netty 对Reactor线程模型的支持提供了灵活的定制能力，所以可以满足不同业务场景的性能诉求。
+
+----
+
+Netty 的线程模型之后能否对我们平时做高性能应用带来点启发呢？
+
+我认为是可以的：
+
+- **接口同步转异步处理**。
+- **回调通知结果**。
+- 多线程提高并发效率。
+
+
+
+无非也就是这些，只是做了这些之后就会带来其他问题：
+
+- 异步之后**事务如何保证**？
+- **回调失败**的情况？
+- 多线程所带来的**上下文切换**、共享资源的问题。
 
 
 
