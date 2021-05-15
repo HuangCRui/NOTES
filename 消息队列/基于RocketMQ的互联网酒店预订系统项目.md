@@ -261,14 +261,14 @@ Nginx 结合OpenResty的脚本功能还可以和缓存队列等技术有机结�
 修改房间执行流程：
 
 1. “酒店管理人员”通过“酒店管理后台”访问房间详情的配置信息。这里的入口是H5，也就是管理后台的具体实现。
-2.  此时请求通过H5请求到系统的入口，作为**反向代理和负载均衡的Nginx**接受到请求会将其转交给“儒猿自研网关”。
-3.  在“儒猿自研网关”可以进行**用户验证、流量限制**等工作，最终通过服务层请求对应的服务。
+2. 此时请求通过H5请求到系统的入口，作为**反向代理和负载均衡的Nginx**接受到请求会将其转交给“儒猿自研网关”。
+3. 在“儒猿自研网关”可以进行**用户验证、流量限制**等工作，最终通过服务层请求对应的服务。
 4. 由于**每个服务都是Host在Tomcat之上**的，这里会**通过Tomcat请求每个服务**。这里的Tomcat对应的是“酒店管理后台”，需要与后面提到的**小程序后台Tomcat**作区分。
 5. 在请求服务之前会经过Spring Web MVC**对HTTP请求进行解析，转化为请求对象**。
 6. 将解析请求以后会调用“基础信息管理“中的”房间详情“服务，并且根据请求内容进行房间信息的修改。
-7.  修改信息通过MyBatis 更新到MySQL中完成数据的更新。
+7. 修改信息通过MyBatis 更新到MySQL中完成数据的更新。
 8. 之后再将更新的房间信息**发送给Redis缓存**起来，如果此时有请求访问时就不用从数据库中获取了。
-9.  接下来就是通过**RocketMQ队列分发修改房间信息的消息**，并且**通知订阅该消息的其他服务。**
+9. 接下来就是通过**RocketMQ队列分发修改房间信息的消息**，并且**通知订阅该消息的其他服务。**
 10. 订阅消息的服务获取**消息通知**以后，会**更新服务本身JVM的缓存**，同样也是为了提高用户的访问效率。
 11. 最后，将这一连串的操作记录成日志存档。
 
@@ -291,11 +291,11 @@ Nginx 结合OpenResty的脚本功能还可以和缓存队列等技术有机结�
 **查询房间执行流程 **
 
 1. “客户”通过微信小程序访问酒店预订系统，此时小程序作为系统的入口。
-2.  访问接入层的Nginx。
-3.  通过“儒猿自研网关”的**过滤**。
-4.  这里访问的是**小程序后台的Tomcat**，其**承载着小程序需要的服务API**。
-5.  依旧是通过Spring Web MVC访问具体的服务。
-6.  房间信息存放在基础信息管理服务中，从这里开始流程会有所不同。
+2. 访问接入层的Nginx。
+3. 通过“儒猿自研网关”的**过滤**。
+4. 这里访问的是**小程序后台的Tomcat**，其**承载着小程序需要的服务API**。
+5. 依旧是通过Spring Web MVC访问具体的服务。
+6. 房间信息存放在基础信息管理服务中，从这里开始流程会有所不同。
 7. 服务在获取用户请求的时候，会**先去检查本地JVM缓存中是否有房间详情的信息，如果有的话将会直接返回给客户。**
 8. 如果在JVM缓存中不存在房间详情，**会从Redis 缓存中获取**。
 9. 如果Redis缓存中依旧不存在该信息，才**回源到MySQL数据库**，同样也是使用MyBatis来访问。
@@ -1074,22 +1074,7 @@ e-project-rocketmq/target
 
 
 ```java
-/**
- * 登录消息的consumer bean
- *
- * @return 登录消息的consumer bean
- */
-@Bean(value = "loginConsumer")
-public DefaultMQPushConsumer loginConsumer(@Qualifier(value = "firstLoginMessageListener") FirstLoginMessageListener firstLoginMessageListener) throws MQClientException {
-    DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(loginConsumerGroup);
-    consumer.setNamesrvAddr(namesrvAddress);
-    //订阅mq的login topic上的所有消息
-    consumer.subscribe(loginTopic, "*");
-    //通过“firstLoginMessageListener”的监听方法获取登录发过来的信息
-    consumer.setMessageListener(firstLoginMessageListener);
-    consumer.start();
-    return consumer;
-}
+/** * 登录消息的consumer bean * * @return 登录消息的consumer bean */@Bean(value = "loginConsumer")public DefaultMQPushConsumer loginConsumer(@Qualifier(value = "firstLoginMessageListener") FirstLoginMessageListener firstLoginMessageListener) throws MQClientException {    DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(loginConsumerGroup);    consumer.setNamesrvAddr(namesrvAddress);    //订阅mq的login topic上的所有消息    consumer.subscribe(loginTopic, "*");    //通过“firstLoginMessageListener”的监听方法获取登录发过来的信息    consumer.setMessageListener(firstLoginMessageListener);    consumer.start();    return consumer;}
 ```
 
 
@@ -1175,7 +1160,7 @@ CouponConsumer在消费完“第一次登录”的消息之后会**给RocketMQ�
 解决优惠券发放幂等性的问题需要回到消费者处理消息本身。作为优惠券消息的消费者CouponConsumer需要从RocketMQ的队列中获取消息，在上节课中介绍的两种情况中：
 
 1. 因为网络抖动生产者（LoginProducer）产生了重复的消息，CouponConsumer会重复消费两条消息。
-2.  消费者（CouponConsumer本身）由于下线没有通知broker CONSUMER_SUCCESS，导致重启后重复消费。
+2. 消费者（CouponConsumer本身）由于下线没有通知broker CONSUMER_SUCCESS，导致重启后重复消费。
 
 如图1所示，如果在消费者（CouponConsumer）每次处理消息的时候都将这个消息存放到Redis上进行缓存，**在每次发放优惠券之前都会询问“是否存在相同消息？”**，只有**在“否”的情况下才执行“发放优惠券”**。这里的“否”也就是**不存在相同优惠券**的意思，于是就避免了优惠券的重复发放。
 
@@ -1558,32 +1543,45 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## **基于MQ的广播消息，实现客房数据的缓存一致性**
 
 
 
+房间管理后台作为房间更新消息的发送者，在添加房间时会**保存数据到数据库**和存储房间缓存到**redis中**，修改房间的时候修改数据库，更新缓存，同时发送房间更新的消息到RocketMQ的message队列中。这个消息是用来**通知消费者，酒店房间已经修改**，当消费者接受到该消息以后就会**查询Redis缓存，更新JVM本地缓存的操作了**。
 
 
 
+酒店管理后台需要发送房间更新的消息，那么需要一个消息的载体，如图1 所示，在/api/hotel/dto 下面定义了HotelRoomMessage，其中包括roomId（房间ID）和phoneNumber（手机号）的信息。这个实体会在产生Redis缓存更新的时候从Producer发送给RocketMQ，最终由Consumer接收了。
 
 
 
+有了房间消息就一定有对应的消费者，HotelRoomConsumerConfiguration，其中定义了RokcetMQ的name server、hotelRoom的topic以及对应的group，相关配置信息在application.properties文件中。通过@Bean 方式初始化hotelRoomConsumer 的bean对象，并依赖注入HotelRoomUpdateMessageListener Bean对象实例，在将其作为consumer消费的listener。
 
 
 
+定义HotelRoomUpdateMessageListener类，其中有一个consumeMessage的方法需要注意，和其他消费者一样它也会接受List<MessageExt>信息。
 
+从代码中可以看出，方法中会遍历List中的消息，通过解析消息获取roomId的信息，并且通过roomId从Redis中获取房间信息。最后，通过HotelRoomCacheManager的updateLocalCache方法将其更新到JVM的本地缓存中，完成Redis与JVM缓存一致性的操作。
 
 
 
 
 
+## **验证系统的多级缓存数据是否一致**
 
 
 
+在管理端后台修改了房间的价格为999后，首先更新数据库中对应的房间表信息
 
+![image-20210514142615592](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514142615592.png)
 
+然后更新redis中的房间信息，并**向消息队列中  发送更新房间信息的消息**，**通知酒店小程序更新jvm本地缓存**
 
+![image-20210514142415267](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514142415267.png)
 
+酒店小程序接收到房间信息更新的消息，从Redis中获取房间信息，并更新JVM的本地缓存信息
 
+![image-20210514142336353](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514142336353.png)
 
 
 
@@ -1615,6 +1613,7 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+# 订单系统
 
 
 
@@ -1622,16 +1621,21 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## 订单业务整体流程
 
 
 
 
 
+订单的下发是互联网酒店预订系统的重要组成部分。如图1 所示，在酒店小程序这端，客户完成登录以后，会通过**查询酒店和查询房间的功能找到心仪的房间**。
 
+从“预订房间”（橙色的模块）开始就进入下单的流程，客户会对房间进行付款，如果付款成功会**创建订单**，并且**将订单状态设置为“待入住”**。如果没有付款，也会创建订单，同时将状态设置为**“待付款”**。
 
+这部分的订单信息，会**保存到数据库中**，后续给酒店管理人员查看。如果**使用了优惠券**，还会去更新优惠券的使用信息。完成订单创建的工作之后，会**推送下单成功的微信消息给客户**。
 
 
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/kln0rbf00vdx.png)
 
 
 
@@ -1639,119 +1643,183 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## 基于MQ对订单系统中进行异步化改造
 
 
 
 
 
+### 同步方式的下单流程
 
 
 
+查询房间、预订房间、生成订单，更新优惠券，最后推送微信的消息通知。属于下单主要流程的是**生成订单、更新优惠券**，而**查询和预订房间的步骤属于下单之前的预备动作**。
 
+再看**推送微信消息通知**可以作为**下单之后的后续动作**，虽然和下单相关，但是即便不同步发送或者稍有延迟地推送对下单本身也没有特别的影响。
 
+在图1 的设计中推送微信消息的功能是在下单流程中同步完成的，也就是**当消息推送成功以后下单才能完成**。
 
+> 而微信推送本身要使用网络IO，也需要**调用第三方系统**，这样会**影响订单系统的稳定性和执行效率。**
 
+在高并发的场景中，为了提高系统的吞吐量，需要将推送微信消息这类功能进行异步化处理。处理方式不言而喻就是使用RocketMQ对其进行解耦。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpd8z3802ij.png)
 
 
 
+### 异步方式的下单流程
 
 
 
+异步化处理的方式需要对推送微信消息功能进行拆解。如图2 所示，我们把推送微信消息进行如下拆解，主要关注拆解后带颜色的部分，其他无关的功能流程暂时用灰色表示。
 
+在下单完成以后**一定会生成对应的订单**，此时通过订单生产者（绿色）生成订单的信息，将这个信息发送到RocketMQ的队列中。同时由**订阅订单消息的消费者（橙色）去接受这个信息，然后执行推送微信通知（紫色）的功能。**
 
+通过RocketMQ异步化的方式，将订单消息生产者、RocketMQ、订单消息消费者、推送微信通知等几个功能与上面的下单功能进行了异步化的处理。
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpdaelj03al.png)
 
 
 
+> 就是**订单生成以后订单的流程就结束了**（而不必同步等待推送微信通知后订单流程才结束，调用<微信通知远程服务>可能会很长时间），系统可以**处理其他创建订单的请求**。系统只需要发送一个订单创建的消息到RocketMQ中，**推送微信通知的功能就交给消费服务去执行了**。不用同步等待推送微信消息成功后才返回结果，来**提高系统的吞吐量。**
 
 
 
+将下单的同步流程改成了异步，主要是将微信消息通知的模块通过RocketMQ方式和原来的下单流程进行解耦，解耦以后下单和发送消息可以独立运行，互相不会依赖，提高执行效率从而应对高并发的场景。
 
 
 
 
 
+## 订单业务相关代码
 
 
 
 
 
+”t_shop_order” 就是订单表，其中包括订单Id，手机号、订单所属平台、用户Id等信息。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpdp35u0d5e.png)
 
 
 
 
 
+订单项表，”t_shop_order_goods”，主要描述订单里面包含商品的具体内容。对于本案例来说就是房间的信息。其包括了订单Id（与订单表进行关联），手机号、预订天数、商品详情、商品SKU等信息。
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpdpii00nwo.png)
 
+添加订单：OrderInfoDTO是前端传入的一些信息，订单号，店铺id，酒店id，使用的优惠券id和金额等信息，直接交给后台处理
 
+![image-20210514105655072](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514105655072.png)
 
+![image-20210514105628256](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514105628256.png)
 
+![image-20210514105636200](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514105636200.png)
 
 
 
+- 订单消息生产者：
 
+定义完订单消息，这里需要定义订单消息的生产者，顾名思义就是用来产生订单消息的producer
 
 
 
+- 创建订单消息管理组件
 
+有了订单消息的生产者以后，需要**执行订单发送的执行者**，这个执行者会**调用生产者去发送订单消息**。在“api/order/service”下定义OrderEventInformManager接口，在这个接口中定义了informCreateOrderEvent方法，传入的参数是OrderInfoDTO。
 
+同样在“api/order/service/impl”定义了OrderEventInformManagerImpl 实现了上述接口的方法。其中的sendOrderMessage的私有方法实现了具体的发送的功能。这个方法会传入MessageTypeEnum和OrderInfoDTO作为参数，用来创建消息体。
 
+通过调用orderMQProducer中的send方法将消息发送到队列中。最终再由informCreateOrderEvent进行调用，完成消息的发送。
 
 
 
+刚创建订单时，**消息类型：订单待付款通知**
 
+![image-20210514110517019](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514110517019.png)
 
+selector：根据订单id，来选择发送到哪个消息队列中，
 
+![image-20210514110830589](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514110830589.png)
 
 
 
 
 
+## 推送订单消息到用户微信
 
 
 
 
 
+息能力是小程序能力中的重要组成，微信小程序为开发者提供了订阅消息能力。这种能力可以包括如下几个部分的内容。
 
+- 订阅消息推送位置：**服务通知**
+- 订阅消息下发条件：**用户自主订阅**
+- 订阅消息卡片跳转能力：点击查看详情可**跳转至该小程序的页面**
 
+如图1 所示，当用户登录微信小程序的时候，程序就会询问用户**是否接受消息订阅**。在选择“允许”以后，用户就会收到来自小程序的消息推送了。
 
+<img src="../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514111630062.png" alt="image-20210514111630062" style="zoom:33%;" />
 
 
 
+订阅消息包括以下两种类型：
 
+- 一次性订阅消息用于解决用户使用小程序后，后续服务环节的**通知**问题。用户自主订阅后，开发者可不限时间地下发一条对应的服务消息；**每条消息可单独订阅或退订**。通常来说针对某一种业务进行**一次性的消息订阅和推送**。
+- 长期订阅消息是为了满足**下线长期服务的场景**，如航班延误，需根据航班实时动态来多次发送消息提醒。为便于服务，我们提供了**长期性订阅消息**，用户订阅一次后，开发者可长期下发多条消息。
 
+由于我们的酒店小程序是在每次订单生成的时候进行消息推送，属于一次性订阅消息的场景。我们在选择订阅类型的时候，也需要关注小程序使用的场景灵活选择。
 
 
 
+----
 
+实现订阅的三个步骤
 
+- 步骤一：获取模板 ID
 
+在微信公众平台手动配置获取模板 ID：登录 [https://mp.weixin.qq.com](https://mp.weixin.qq.com/) 获取模板，如果没有合适的模板，可以申请添加新模板，审核通过后可使用。
 
+如图2所示，这是儒猿团队为大家生成好的模版。其中包括：订单待付款提醒、订单确认通知、支付成功通知、订单取消通知、订单结束提醒。根据使用场景，它们的类型都是一次性订阅。
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpws8mo062g.png)
 
 
 
+- 步骤二：获取下发权限
 
+需要通过小程序端消息订阅接口 `wx.requestSubscribeMessage`，进行权限的下发，它主要完成以下工作：
 
+- 调起**客户端小程序订阅消息界面**，返**回用户订阅消息的操作结果**。
+- 当用户勾选了订阅面板中的“总是保持以上选择，不再询问”时，模板消息会被添加到用户的小程序设置页，通过 [wx.getSetting](https://developers.weixin.qq.com/miniprogram/dev/api/open-api/setting/wx.getSetting.html) 接口可**获取用户对相关模板消息的订阅状态**。
 
+这个过程说白了就是**让用户授权给小程序去发送消息**。
 
+- 步骤三：调用接口下发订阅消息
 
+在获取下发消息的权限以后就可以通过接口下发消息了，这里需要使用**服务端消息发送接口** `subscribeMessage.send`。这个发送的工作已经由儒猿团队封装成**dubbo 服务**完成了，如果对之前的介绍有印象的话，这个功能就在**little-project-message**的依赖包中。在后续的代码实现中，我会带大家调用这个包中的方式，实现这个功能，因此在后面还会提到。
 
 
 
+## 将订单消息实时推送到用户微信
 
 
 
+message包，主要负责对消息推送的处理。
 
+OrderMessage中定义了消息内容和消息类型
 
+MessageConsumerConfiguration，其中定义了RokcetMQ的name server、order的topic以及对应的group。通过@Bean 方式初始化orderConsumer 的bean对象，并**依赖注入orderMessageListener Bean对象实例，在将其作为consumer消费的listener**。在启动初始化configuration的时候会初始化orderConsumer，并且将它启动。
 
 
 
+![image-20210514113650226](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514113650226.png)
 
 
 
+![image-20210514113551419](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514113551419.png)
 
 
 
@@ -1759,93 +1827,142 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## 超时取消订单
 
 
 
 
 
+客户通过登录酒店小程序经过查询酒店、房间的功能生成订单，创建的订单有**待入住/待付款**的状态，然后更新优惠券信息，最后发送微信消息通知。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpzrf3k0sdc.png)
 
 
 
 
 
+将整个“下单流程”进行了浓缩，形成了一个模块放在最上面，紧接着就是生成订单，可以理解为实际的订单。
 
+同样它是需要和管理后台的数据进行同步的。接下来就是取消订单的流程，我们用有颜色的模块标示出来，大家可以顺着执行的步骤一起来看：
 
+1. 在订单生成完毕以后，客户是可以**手动取消订单**的，这种操作**在小程序上就可以实施**，属于***显性操作***。
 
+2. 还有一种情况就是在订单创建30分钟以后依旧**没有对订单进行付款**，此时系统会**自动取消订单**，把购买的机会让给其他客户。通常的做法，会在系统中设置一个***“扫描订单支付状态”的Job，这个Job每隔一段时间会扫描订单表。***
 
+3. 扫描时筛选条件为  
 
+   1.***订单状态待支付***   ;   2. 同时**订单超过30分钟未支付**
 
+   此时会执行“**自动取消订单”的业务**，我们把这个自动取消的动作可以理解为***隐性动作***，是在满足一定条件下触发的动作。
 
 
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpzsgxz0y70.png)
 
 
 
 
 
+## 未引入mq时，大量订单超时的取消逻辑
 
 
 
+完成下单流程以后，客户通常是会进行付款操作的，但也有例外情况，例如：看中了其他的房间、或者对周边环境的要求更换了居住的酒店等等。无论出现何种情况，**生成的订单都处于“未支付”状态。**
 
 
 
+一般而言这种已经下单的房间，酒店会为客人保留一段时间，在这段时间内**其他客人是无法预订当前房间**。正因为有这样的规定，酒店预订系统中一般会**设计30分钟支付的业务流程**。客户**在下单的30分钟之内如果进行支付，那么这个房间就是你的了**。
 
+反之，如果超过30分钟没有支付，酒店系统就会**释放掉房间资源让其他客户进行预订**，这里体现的操作就是***“自动取消订单”***。
 
+与“手动取消订单”不同的是，“自动取消订单”是由***系统通过检查订单状态和超时时间来完成的。***
 
 
 
+----
 
+- 定时任务扫描订单表
 
 
 
+那么如何实现自动取消订单逻辑呢？通常来说我们会建立一个***定时任务*** ，如图1 所示，下方蓝色的模块就是定时任务，让我们顺着图中的序号，一起看看它们是如何工作的吧：
 
+1. 创建订单以后，订单信息会保存到数据库中。
+2. 如果此时**有支付订单的行为**，一定会更新数据库中订单的状态为“已支付”。
+3. 定时任务会***不断扫描订单表***。
+4. 定时任务在筛选订单数据时会设置两个条件，***第一个订单状态是否是“未支付”，第二个是创建订单的时间到当前的时间是否超过了30分钟***。只有满足以上两个条件才执行“取消订单”的操作。
+5. 定时任务**调用取消订单的接口**，紧接着**更新数据库中订单的信息**，完成**自动取消订单的流程。**
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klpz5bn9018o.png)
 
 
 
 
 
+---
 
+- 定时任务的问题
 
+虽然定时任务能满足自动取消超时订单的逻辑，但是这种实现方式实际上并不是很好。
 
+一个原因是**未支付状态的订单可能是比较多**的，然后你**需要不停的扫描他们**，可能**每个未支付状态的订单要被扫描N多遍，才会发现他已经超过30分钟没支付了**。
 
+主要是分布式的问题：
 
+另外一个是很难去***分布式并行扫描***你的订单。因为假设你的订单数据量特别的多，然后你要是打算用**多台机器部署订单扫描服务**，但是**每台机器扫描哪些订单？怎么扫描？什么时候扫描？**这都是一系列的麻烦问题。
 
+实际上可以通过**RocketMQ延时消息**来解决这个问题，这也是我们下节课要讲到的内容。
 
 
 
 
 
+## **MQ延时消息**
 
 
 
 
 
+引入RocketMQ接收订单生成的消息，同时***发送一个延迟30分钟的消息给消费者***。在30分钟以后***消费者接受到消息在进行订单状态的判断***，不仅减少了扫表的工作，而且简化的实现逻辑，同时还**将两个功能进行了解耦**，不是挺好吗。
 
 
 
+顺着这个思路思考，我们通过引入RocketMQ的方式在**创建订单的时候就发送一个延迟消息**，这个消息会发送到RocketMQ内部**延时的topic**中，在30分钟后RocketMQ内部会重新投递到原topic给订阅该订单延时topic消费者消费，在消费的时候去判断订单是否被支付，如果没有支付就取消订单。
 
 
 
+实现：
 
+1. 在创建订单的时候，就调用消息生产者生成一条**延迟消息**。
+2. 这个延迟消息生产者的任务就是发送一条消息，**消息在30分钟以后会被消费**。
+3. 延迟消息消费者会**在30分钟以后获取消息通知**，此时**判断“订单是否支付？**”
+4. 如果此时订单没有支付，就满足了订单创建以后30分钟都没有支付的条件，于是调用**取消订单**的操作。完成系统自动取消订单的功能。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klq0m5fd01nb.png)
 
 
 
 
 
+---
 
+- 业务流程：
 
 
 
+由于定时任务面对**大量**超时未付款订单的处理效率问题，我们将其替换成了RocketMQ的方案。如图2 所示，方案按照以下几个步骤进行：
 
+1. 订单生成之后通过**延迟消息生产者**发送延迟消息，也就是上面提到的30分种被消费的订单消息，这个消息会被发送到RocketMQ的队列中。
+2. 在30分钟的延迟时间以后，**延迟消息消费者会获取到这个消息**，并且对消息内容进行判断，如果还没有支付。
+3. 那么就满足了30分种以后依旧没有支付的订单条件，于是执行取消订单的操作。
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klq0mku90bky.png)
 
 
 
 
 
+## 代码实现： **通过延时消息取消订单、退回优惠券、推送消息**
 
 
 
@@ -1853,103 +1970,149 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+### 取消订单
 
 
 
+![image-20210514133301444](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514133301444.png)
 
 
 
+向消息队列中发送取消订单的消息，其中包括订单状态：取消订单
 
+![image-20210514134542940](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514134542940.png)
 
+![image-20210514134633079](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514134633079.png)
 
 
 
 
 
+### 延时消息
 
 
 
+有了延迟消息的发送者就有消息的消费者，在“api/order/consumer”下面建立OrderDelayConsumerConfiguration类，其中定义了name server address、topic和group的信息。和producer 一样也，通过@Bean的annotation 定义了orderDelayConsumer，并且定义orderDealyMessageListener作为订阅消息的Listener，同时启动orderDelayConsumer消费者。
 
+定义这个延时消息消费者 监听 延时消息的 topic
 
+![image-20210514134955401](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514134955401.png)
 
 
 
 
 
+- 延迟消息监听者：
 
+在“api/order/listener”中创建OrderDelayMessageListener类，该类实现MessageListenerConcurrently 接口中的consumeMessage方法，**对接收到的message进行处理**。由于producer发送的是延迟消息，**因此consumeMessage是在延迟以后接受到的消息**。
 
+方法中会通过message中解析出订单信息，**通过redis加入分布式锁，防止在取消订单的时候同时客户进行支付订单，让取消和支付动作串行化，保证数据的正确性**。然后就是调用orderService中的cancelOrder方法传入订单号和手机号，对订单进行取消操作。
 
 
 
+![image-20210514135715863](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514135715863.png)
 
 
 
+![image-20210514135640296](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514135640296.png)
 
 
 
 
 
+发送订单付款的延时消息，这里设置为3分钟
 
+![image-20210514140454217](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514140454217.png)
 
+![image-20210514140531646](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514140531646.png)
 
 
 
 
 
+## 测试微信消息发送、取消订单、超时自动取消订单
 
 
 
 
 
+![image-20210514143010081](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514143010081.png)
 
 
 
+手动取消订单：
 
+![image-20210514143224709](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514143224709.png)
 
 
 
 
 
+发送延时消息：
 
+![image-20210514143124532](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514143124532.png)
 
 
 
+1. 收到3分钟后的延时消息
+2. 获得了redis锁
+3. 进入cancelOrder方法，重新查询订单的状态
+4. 退回使用的优惠券
+5. 向微信发送通知消息，`informCancelOrderEvent`，消息类型为：**<订单取消通知>**，
 
+![image-20210514143650941](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514143650941.png)
 
 
 
 
 
+手动取消：
 
+![image-20210514144005458](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514144005458.png)
 
 
 
+自动取消：
 
+![image-20210514143930932](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514143930932.png)
 
+正好3分钟，自动取消
 
+![image-20210514143916736](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514143916736.png)
 
 
 
 
 
+![image-20210514144251620](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514144251620.png)
 
 
 
 
 
+# 订单支付
 
 
 
+## **支付订单的整体业务逻辑**
 
 
 
 
 
+- 订单支付主要流程
 
 
 
+将之前介绍过的下单流程、取消订单流程以及生成订单的动作进行简化处理，用灰色的模块表示。因此，将重点放到有颜色的部分，也就是**订单的支付流程**。依旧按照箭头从上往下的顺序依次给大家介绍：
 
+1. 在完成订单以后，有两个选择一个是**取消订单**，另外一个是**支付订单**。在点击“支付订单”按钮的时候，首先会调用**微信支付接口**，由于是**第三方接口需要等待接口返回支付是否成功**。因此这里会涉及到***回调服务的设计***，后面章节会具体展开。另外，为了让大家顺利进行实验，儒猿团队对支付过程进行了简化，弹框显示是否支付，**点击确认支付则回调支付接口。**
+2. 在获得微信支付的回调以后，会**判断支付是否成功**。**如果失败就通知用户，如果成功就会保存支付的流水信息。**
+3. 此后就会进入**支付幂等性的判断环节**，主要原因是***对同一个订单的支付不会重复执行***。
+4. 支付完成以后会更新订单状态，将其**修改为“已支付（待入住）”的状态**。
+5.  最后还会给客户推送**“支付成功”的微信消息推送**，依旧会带上对应的**支付信息和订单信息**作为参考。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klq6zjgx0d8t.png)
 
 
 
@@ -1957,6 +2120,7 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## **微信小程序订单如何支付的**
 
 
 
@@ -1964,87 +2128,192 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+**小程序调起支付API**
 
 
 
+前端是通过微信小程序完成的，如果在其中实现支付的功能需要使用**小程序支付API**。通过小程序下单接口获取到发起支付的必要参数prepay_id，可以按照接口定义中的规则，使用微信支付提供的SDK调起小程序支付。
 
+在小程序中调用`wx.requestPayment(OBJECT)`**发起微信支付**，这里的OBJECT就是我们**需要传入的关于支付的对象**。如图1 所示，传入的OBJECT包括如下部分：
 
+时间戳（timeStamp），表示发起支付的当前**时间**，通过字符串类型显示。
 
+随机字符串（nonceStr），是一个不长于32位的随机数字，是为了**随机算法**而使用的。
 
+订单详情扩展字符串（package），这个是统一下单接口返回的prepay_id参数值。具体到本项目，也就是**预下单的订单Id**。
 
+**签名方式**（signType），为了安全性考虑，会通过appId、timeStamp、nonceStr和package生成签名，这里的signType就是签名算法，默认情况下是**RSA算法**。
 
+签名（paySign），每次支付请求都会通过通过**appId、timeStamp、nonceStr和package生成签名**，生成的是一个**无法阅读的字符串**。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klq78u3q0epq.png)
 
 
 
+---
 
+- 签名算法
 
 
 
+在调用小程序支付接口的时候需要传入OBJECT，其中需要将一些信息进行签名处理，其目的就是为了解决安全问题。因此需要经历如下几个步骤：
 
+1、构造签名串
 
+签名串一共有四行，每一行为一个参数。行尾以\n（换行符，ASCII编码值为0x0A）结束，包括最后一行。
 
+如果参数本身以\n结束，也需要附加一个\n
 
+参与签名字段及格式：
 
+APPID（小程序ID）
 
+时间戳（TimeStamp）
 
+随机字符串（NonceStr）
 
+订单详情扩展字符串（package）
 
+```
+数据举例：
 
+APPID（小程序ID）：wx8888888888888888
 
+时间戳（TimeStamp）：1414561699
 
+随机字符串（NonceStr）：5K8264ILTKCH16CQ2502SI8ZNMTM67VS
 
+订单详情扩展字符串（package）：prepay_id=wx201410272009395522657a690389285100
+```
 
 
 
 
 
+2、计算签名值（paySign）
 
+PaySign的生成就是通过**签名方式（signType）**加上上述资格参数生成的，这里不具体深入算法原理。算法会生成如下的字符串。
 
+```
+oR9d8PuhnIc+YZ8cBHFCwfgpaK9gd7vaRvkYD7rthRAZ\/X+QBhcCYL21N7cHCTUxbQ+EAt6Uy+lwSN22f5YZvI45MLko8Pfso0jm46v5hqcVwrk6uddkGuT+Cdvu4WBqDzaDjnNa5UK3GfE1Wfl2gHxIIY5lLdUgWFts17D4WuolLLkiFZV+JSHMvH7eaLdT9N5GBovBwu5yYKUR7skR8Fu+LozcSqQixnlEZUfyE55feLOQTUYzLmR9pNtPbPsu6WVhbNHMS3Ss2+AehHvz+n64GDmXxbX++IOBvm2olHu3PsOUGRwhudhVf7UcGcunXt8cqNjKNqZLhLw4jq\/xDg==
+```
 
 
 
 
 
+---
 
+- 微信小程序支付调用栗子
 
 
 
+timeStamp传入了时间戳信息，nonceStr是**随机字符串**、package是prepay_id（**预订单）的ID号**，signType是**签名的加密算法RSA**，上述信息**加密以后最终生成paySign**。
 
+这些信息在请求以后微信的支付接口会返回支付的结果。分别是**success成功、fail失败和complete完成。**
 
+之前和大家提供这里支付的细节已经由儒猿团队处理过了，因此我们聚焦到支付成功的情况，在图中标注出success的情况下会***调用我们项目提供的API的访问地址***。这个具体的访问地址已经封装成了**RESTFUL API**，并且**以PayController的方式暴露出去了**，
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klq7aenn0yf9.png)
 
 
 
+## **通过MQ来通知微信支付订单成功**
 
 
 
+由于***订单支付需要记录支付的流水情况***，就好像银行流水一样需要将客户进行的每一笔交易都记录下来。如图1 所示，**根据支付业务建立“pay_transaction”表**，包括交易流水号、订单号、订单总金额、订单优惠金额、订单应付金额、交易渠道、用户支付账号以及手机号、交易时间等信息。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klq7nqok0lvu.png)
 
 
 
 
 
+编写对应的交易逻辑，于是在“api/pay/service”和“api/pay/service/impl”下面分别建立PayTransactionService接口和PayTransactionServiceImpl的实现。
 
+如图4所示，其主要目的就是**更新“pay_transaction”表的内容**，记录每一笔的支付交易。其中建立了save方法传入PayTransaction和phoneNumber参数，**插入订单号、订单量、支付金额、支付账户、支付渠道、流水号、支付时间、返回码、以及状态等信息**。
 
 
 
+![image-20210514150442068](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514150442068.png)
 
 
 
+- 订单支付回调入口
 
 
 
+由于我们是通过调用微信的支付接口完成支付的，在**请求支付的时候就会指定回调函数**。这里的**PayController提供的RESTFUL API就是回调函数**。 如图5 所示，wxCallBack方法对应“wx/callback”的url，接受QueryPayStatusResponse作为参数，**这个对象就是微信支付完成以后传给调用方的。**
 
+从中可以获取订单号、用户账号、流水号、订单完成时间、返回码、支付渠道、以及支付金额和状态的信息。并且通过执行payTransactionService中的save方法**将订单流水进行保存**。同时在订单支付成功以后会**调用orderService中的informPayOrderSuccessed方法发送通知。**
 
 
 
+```java
+/**
+ * 微信支付回调接口
+ *
+ * @param queryPayStatusResponse 支付回调响应
+ * @return 结果 订单id
+ */
+@PostMapping(value = "wx/callback")
+public CommonResponse<Integer> wxCallback(QueryPayStatusResponse queryPayStatusResponse) {
 
+    String orderNo = queryPayStatusResponse.getOrderNo();
+    String phoneNumber = queryPayStatusResponse.getPhoneNumber();
 
+    // 同一个订单多次支付保证接口幂等
+    CommonResponse<Boolean> response = redisApi.setnx(ORDER_DUPLICATION_KEY_PREFIX + orderNo,
+                                                      orderNo,
+                                                      phoneNumber,
+                                                      LittleProjectTypeEnum.ROCKETMQ);
+    if (Objects.equals(response.getCode(), ErrorCodeEnum.FAIL.getCode())) {
+        // redis请求失败
+        LOGGER.info("pay order wx callback redis dubbo interface fail orderNo:{}", orderNo);
+        return CommonResponse.fail();
+    }
 
+    // redis操作成功
+    if (Objects.equals(response.getData(), Boolean.FALSE)) {
+        // 重复订单 返回
+        LOGGER.info("duplicate pay order orderNo:{}", orderNo);
+        return CommonResponse.success();
+    }
 
+    PayTransaction payTransaction = new PayTransaction();
+    payTransaction.setOrderNo(orderNo);
+    payTransaction.setUserPayAccount(queryPayStatusResponse.getUserPayAccount());
+    payTransaction.setTransactionNumber(queryPayStatusResponse.getTransactionNumber());
+    payTransaction.setFinishPayTime(DateUtil.format(queryPayStatusResponse.getFinishPayTime(), DateUtil.FULL_TIME_SPLIT_PATTERN));
+    payTransaction.setResponseCode(queryPayStatusResponse.getResponseCode());
+    payTransaction.setTransactionChannel(PayTypeConstant.WX);
+    payTransaction.setPayableAmount(queryPayStatusResponse.getPayableAmount());
+    Integer status = queryPayStatusResponse.getPayTransactionStatus();
+    payTransaction.setStatus(status);
+    // 保存支付流水
+    if (!payTransactionService.save(payTransaction, phoneNumber)) {
+        // 失败 等待微信重试
+        return CommonResponse.fail();
+    }
 
+    Integer orderId = null;
+    if (Objects.equals(status, PayTransactionStatusConstant.SUCCESS)) {
+        // 支付成功
+        try {
+            orderId = orderService.informPayOrderSuccessed(payTransaction.getOrderNo(), phoneNumber);
+        } catch (Exception e) {
+            // 支付订单异常 删除 幂等的key
+            redisApi.del(ORDER_DUPLICATION_KEY_PREFIX + orderNo,
+                         phoneNumber,
+                         LittleProjectTypeEnum.ROCKETMQ);
+            return CommonResponse.fail();
+        }
+    }
 
+    return CommonResponse.success(orderId);
+}
+```
 
 
 
@@ -2054,16 +2323,22 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+订单支付服务之前就已经有了只是加入了新方法informPayOrderSuccessed，供支付完成回调使用。如图6所示，在OrderService和OrderServiceImpl中分别加入informPayOrderSuccessed方法，传入订单号和手机号作为参数。在获取订单信息的同时，进行更新订单状态的操作，通过updateOrderStatusAndPayTime方法将订单状态更新为“已支付（“待入住”）”。
 
+> 需要注意的是为了更新订单状态的时候防止取消订单，使用了Redis作为同步锁，让对订单支付操作和**自动取消操作**串行化。
+>
 
+可能在支付成功后，还没有修改数据库中的订单状态时，正好触发了 **自动取消操作**，所以需要先获得redis的分布式锁，防止被修改为取消状态
 
 
 
+![image-20210514154941411](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514154941411.png)
 
 
 
 
 
+## 订单在什么情况下会重复支付
 
 
 
@@ -2071,20 +2346,27 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+### 页面**重复点击**的场景
 
 
 
+在实际使用支付接口的场景有可能是微信小程序或者是H5页面，也有可能是IOS或者Android的客户端，无论是那种调用方式都会遇到**页面重复点击**的情况。此时会**发起多次对微信接口的请求，从而导致重复付款的问题。**
 
+不过这种情况可以通过前端控制的方式避免，例如点击“支付”按钮以后按钮就设置为无法使用，**直到支付结果返回才生效**。又或者在前端设置，针对同一个订单号的请求支付动作会做记录，只能进行一次。
 
+不过作为Java的后台程序员来说，不能把控制完全放到前端，即便是在前端有控制的情况下也需要**在支付记录流水的时候避免重复支付的场景**，也就是我们所说的**支付幂等性**。
 
 
 
 
 
+### 支付回调重复多次场景
 
 
 
+上面提到了支付幂等性的问题，也就是同一订单的多次支付动作都视为一次，特别在支付回调的时候。大家都知道支付完成以后**微信接口会调用我们系统的支付回调方法**，也就是本例中`PayController`，`PayController`***处理完毕以后也会给微信接口进行响应***。
 
+但由于网络关系这个响应可能没有及时发送到，此时微信接口会**重复调用PayController再次进行尝试**，如果此时不考虑支付幂等性的问题，我们的系统中有可能就**记录了两条支付信息**。造成的结果就是**在流水中有两条交易记录**，一般电商平台在最终对账的时候会发现交易的流水和实际出货量不一致。这也是为什么系统需要考虑支付幂等性的问题。
 
 
 
@@ -2094,54 +2376,80 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## 基于redis幂等机制，解决订单重复支付问题
 
 
 
+从幂等性原理上来说，就是这个操作无论执行多少次起结果都是一样的。回到订单支付的功能上来看，一个订单无论执行多少次支付，都只能扣一次钱、执行一次支付流水的记录。因为这个**支付流水是要用来做对账核销操作的**，是不允许出错的。
 
+如图1所示，修改“api/pay/controller/PayController”类，在wxCallback方法的中，记录订单支付流水之前加入红框中的代码。加入存入Redis的部分，通过redisApi.setnx方法（已经由儒猿团队进行封装）将消息信息保存到Redis中。设置订单号作为Key，后面的订单号、电话号码作为Value。
 
+利用setnx的函数特性，当response返回成功“SUCCESS”同时返回值为“FALSE”说明Redis中对应的Key已经有Value 了，也就**说明Redis中已经存在这个订单号**，表明系统已经处理过这个订单的支付流水了。这种情况下，**只记录一个日志，而不进行后续的操作**（不再保存支付流水）。
 
+反而如果返回的是“SUCCESS”并且返回值为“TRUE”，说明Redis没有记录这条消息，也就是第一次支付订单，那么就需要新增一条订单支付的流水信息。
 
+![image-20210514155717853](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514155717853.png)
 
 
 
 
 
+将每次订单支付信息都在Redis进行记录，这样一来即便是**对同一订单的多次支付请求回调**，都会**判断在Redis中是否存在订单支付的记录**，一旦发现就不予处理。程序根本就不会进入到下**面的支付流水的记录和订单状态保存的部分**。充分地**保证了支付的幂等性**，防止了重复支付的情况发生。
 
+在很多涉及到**关键信息**的操作时，例如：现金、积分、优惠券都需要保证幂等性，这种方式也是工业级应用中常见的。
 
 
 
 
 
+# 入住业务
 
 
 
 
 
+当客户达到酒店办理入住事宜的时候，管理人员在与客户核实订单信息以后就可以给客户办理入住手续了。
 
+如图1 所示，我们依旧将前面几个章节中已经讲过的部分用灰色模块表示，目的是简化业务流程操作，同时也让大家看到整体业务的走向。本节课从支付订单之后的流程说起，将其分为以下几个步骤：
 
+1. 支付订单完成以后，酒店后台管理人员可以**登录酒店管理后台查看到对应的订单状态，此时的订单状态为“待入住”。**
+2. 当客户到店进行入住手续办理时，酒店后台管理人员会**核实订单信息，进行“确认入住”**，此后客人就可以入住酒店了。
+3. 在“确认入住”完成以后，也会**向酒店小程序端发送一条“确认入住”的消息，此时客户可以查看确认入住消息。**
+4. 同时，客户在小程序端查看订单状态的时候，其**状态也修改为“已入住”**，从而完成入住的业务流程。
 
+<img src="../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514160106859.png" alt="image-20210514160106859" style="zoom:67%;" />
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klqa4odj063m.png)
 
 
 
 
 
+从整个用户入住流程来看主要是小程序端与管理后台进行交互，属于**系统或者应用之间的沟通**，在实战过程中会使用不同的包结构来代表不同的应用，**在消息通知的部分依旧会使用RocketMQ作为桥梁。**
 
 
 
 
 
+## 管理端订单服务
 
 
 
 
 
+调用订单服务的这个方法，修改订单的状态为已入住(<待退房>)，并且向微信发送消息通知
 
+![image-20210514161539912](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514161539912.png)
 
+updateOrderStatus方法中实际上是对“t_shop_order”表的更新，其主要目的就是根据订单号，将订单状态更新为“CONFIRM”。
 
+在更新完订单状态之后，会调用OrderEventInformManager接口中的inforConfirmOrderEvent方法进行微信通知。——<订单确认通知>
 
+![image-20210514161915179](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514161915179.png)
 
+由于在酒店后台管理系统中进行用户入住的操作，因此需要在admin中提供一个controller作为API服务(**酒店后台会调用这个接口来确认当前订单的状态**)。在“admin/controller”中建立AdminOrderController，对应的访问路径为“/admin/order”，同时建立confirmOrder的方法，其访问方式为get、访问路径为“/confirmOrder”，传入参数为订单号和手机号，在方法内部直接调用adminOrderService接口中的confirmOrder方法。
 
+![image-20210514162018965](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514162018965.png)
 
 
 
@@ -2151,6 +2459,7 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## 测试
 
 
 
@@ -2162,6 +2471,7 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+# 退房业务
 
 
 
@@ -2173,6 +2483,7 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## 用户退房业务逻辑
 
 
 
@@ -2180,34 +2491,49 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+在完成登录、授权、获取手机号等操作之后，通过查询酒店和房间进行下单。生成订单以后可以取消也可以走支付流程，支付完成以后客户到酒店入住，酒店的管理人员会对其进行确认，此时完成订单入住操作，同时客户也会接受到消息推送。
 
+今天从确认入住往下介绍，用户在结束旅程之后会在完成登录、授权、获取手机号等操作之后，通过查询酒店和房间进行下单。生成订单以后可以取消也可以走支付流程，支付完成以后客户到酒店入住，酒店的管理人员会对其进行确认，此时完成订单入住操作，同时客户也会接受到消息推送。
 
+今天从确认入住往下介绍，**用户在结束旅程之后会进行退房的操作，这个操作由酒店后台管理人员完成**，在这之后会**修改订单状态为“已完成”**，并且**下发优惠券**，同时也会发送微信的消息通知。如图1 所示：
 
+1. 确认入住以后，用户将度过美好的假期，当房间到期的时候会到酒店前台进行退房操作。此时酒店后台管理系统的管理人员会进行“退房”操作。
 
+2. 退房之后会修改订单状态，将其修改为“已完成”。
 
+   <img src="../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514162805082.png" alt="image-20210514162805082" style="zoom:67%;" />
 
+3. 同时会下发优惠券，通过这种方式引导用户再次入住。
 
+4. 最后，**发送微信的消息通知**，告诉用户已经完成退房的操作。
 
+![图片1.png](http://wechatapppro-1252524126.file.myqcloud.com/apppuKyPtrl1086/image/b_u_5efbf242e79a5_klVaiiYb/klqc215j0utd.png)，
 
 
 
+退房操作起点在酒店后台管理系统，执行者是酒店后台管理人员。该功能是在管理后台，不过调用了酒店小程序后台API的部分功能。例如：**修改订单状态、下发优惠券以及通用模块发送微信消息通知。**
 
 
 
 
 
+## 代码：用户退房
 
 
 
 
 
+方法finishedOrder，传入订单号和手机号的信息。由于使用的是订单的业务，因此需要调用orderService的informFinishedOrder方法并且传入两个参数。![image-20210514163213040](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210514163213040.png)
 
 
 
+调用订单业务，方法通过订单号和手机号获取订单信息，通过updateOrderStatus方法将订单状态修改为“FINISHED”，再调用couponService中的distributeCoupon方法给用户下发优惠券，其中需要传入用户Id、优惠券Id和优惠券有效天数等信息。最后，再通过orderEventInformManager中的informOrderFinishEvent方法进行微信的消息通知。 
 
 
 
+![image-20210515111716179](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515111716179.png)
 
+**这都是同步调用的**
 
 
 
@@ -2215,28 +2541,48 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## 退房成功但优惠券没到账
 
 
 
+在酒店后台管理系统中进行退房之后，会进行“修改订单状态”和“下发优惠券”两个操作。
 
+会存下如下可能性，当“修改订单状态”成功以后，因为**服务宕机**导致“下发优惠券”服务无法正常运行。导致的结果就是**“修改订单状态”成功，但是优惠券没有下发**。
 
+因此这里需要考虑将两个操作放到**同一个事务**里面执行，如果遇到“修改订单状态”成功而“下发优惠券”不成功的情况，需要将“修改订单状态”操作进行回滚。也就是说要么两个操作同时成功，要么两个操作都不执行。
 
+![图片1.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klqcz5mz034k.png)
 
 
 
+同时：订单服务和优惠券服务是同步调用的，高度耦合，当优惠券服务宕机时整个订单退房流程将不可用
 
+此需要基于RocketMQ进行解耦，也就是在“修改订单”成功以后发送消息给“下发优惠券”服务，**“下发优惠券”服务在接受到消息以后在执行对应的功能**。
 
+仔细想想虽然订单服务和优惠券解耦了，但是存在**mq不可用**，导致**退房消息发送失败**情况，需要不断的重试。为了解决以上问题，我们提出下面RocketMQ的分布式事务的方案。
 
 
 
 
 
+---
 
+- **基于RocketMQ分布式事务优化退房流程**
 
 
 
+将订单服务和优惠券服务进行解耦，同时**在发送消息的时候还要保证两个服务中的操作的一致性，也就是分布式事务**。因此我们作出如下方案设计，如图2所示：
 
+1. 订单服务在执行退房订单的时候先向RocketMQ队列发送一个**half消息，用来确定MQ的可用性。**
+2. 在接受到half消息以后**，MQ会返回一个成功的响应**。
+3. 如果此时MQ不可用，那么订单服务就不需要继续执行更新订单的操作了。假设MQ运行正常，订单服务会去**执行本地事务完成“更新订单状态”的操作**。
+4. 订单服务**执行的本地事务**成功与否，会发给MQ不同的信息。当本地事务成功了，会发送Commit消息，MQ内部会**将消息投递到完成订单的topic中**，也就是**优惠券服务的消费者可以看到订单服务发送的消息**。如果本地事务没有成功，就需要**发送rollback消息**，告诉MQ删除之前发送的half消息，意思是：“我的事务执行出错了，就当没有这回事，你该干嘛干嘛！”。
+5. 但是有一种情况，订单服务执行本地事务以后在返回commit或者rollback结果MQ时，由于网络问题MQ没有收到，过一段时间以后**MQ就会回调订单服务的接口**，判断消息状态，询问是commit消息还是rollback消息。
+6. 这里假设订单服务的本地事务执行成功发送给MQ commit信息。MQ收到以后内部会将消息投递到**完成订单的topic中**。
+7. **优惠券服务中会有一个consumer一直监听这个消息。**
+8. 当收到完成订单消息以后就**执行下发优惠券的操作**，从而保证用户能够收到优惠券。
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klqd375j07bi.png)
 
 
 
@@ -2246,56 +2592,81 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+## **引入mq的事务消息，保证优惠券能够到账**
 
 
 
 
 
+- 订单服务
 
+由于管理后台在进行退房的时候，会调用订单服务，所以需要对该服务进行修改。如图1 所示，将之前修改订单、下发优惠券以及发送通知的代码***替换成发送message的代码***。这里通过调用orderFinishedTransactionMqProducer中的sendMessageInTransaction方法，将包含订单信息的orderInfoDTO对象发送出去。
 
+![image-20210515131730936](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515131730936.png)
 
 
 
+----
 
+- 订单事务生产者
 
 
 
+由于订单服务中调用了`orderFinishedTransactionMqProducer`是其发送订单完成的消息，因此需要对其进行**初始化和启动**。在“api/order/producer”中的OrderProducerConfiguration中创建`orderTransactionMqProducer`方法，并且**定义对应的监听器**为finishedOrderTransactionListener，在方法中初始化producer 并且设置了对应的name server address以及**事件回调线程池处理**。
 
+需要注意的是，这里的`finishedOrderTransactionListener`是用来***接受MQ回调的   listener***，它的定义在下面会展开介绍。
 
+![image-20210515132022586](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515132022586.png)
 
 
 
 
 
+---
 
+- RocketMQ回调的Listener
 
 
 
+为了处理MQ回调我们会创建对应响应回调的Listener，如图3所示，在“api/order/listener”中建立`FinishedOrderTransactionListener`类，该类会**实现`TransactionListener`的接口**，其中会override方法`excuteLocalTransaction`。这个方法**在  half  消息发送成功之后供MQ回调**。方法中会**对订单的状态进行修改，并且发送消息通知**。
 
 
 
+![image-20210515133159804](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515133159804.png)
 
 
 
+这个类中还override另外一个方法checkLocalTransaction，如图4所示，它是在MQ没有收到commit或者rollback消息时回调订单服务的方法。它会判断订单服务本地事务的执行情况，如果执行成功会发送commit消息，否则会发送rollback消息。
 
+检查本地事务执行情况：如果本地事务成功，订单状态为：<已完成>，向mq返回commit
 
+![image-20210515133704915](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515133704915.png)
 
 
 
 
 
+---
 
+- 优惠券消费者
 
 
 
+由于订单完成以后会发送message，一旦订单服务的本地事务完成以后，优惠券这边的consumer就可以结束后到message了。
 
+如图5所示，在“/api/coupon/consumer”的CouponConsumerConfiguration中添加一个finishedConsumer方法，对consumer进行初始化并且设置name server address和对应的topic。同时将其在应用启动时注入并且启动consumer。
 
+处理订单退房消息的消费者
 
+![image-20210515134209169](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515134209169.png)
 
 
 
+在“api/coupon/listener”中建立orderFinishedMessageListener。在override方法cosumeMessage中，主要处理下发优惠券的逻辑。能够进入到这个方法，说明已经收到“完成订单”的消息了，此时会解析订单消息。
 
+通过redisApi.setnx的方法确保退房订单的幂等性，保证同一个订单不会执行多次，而导致用户领取多张优惠券。在保证幂等性之后，会通过调用couponService中的distributeCoupon方法执行优惠券的下发工作，包括定义优惠券Id、有效天数、用户Id、电话等信息。
 
+![image-20210515134716773](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515134716773.png)
 
 
 
@@ -2307,6 +2678,7 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+# 基于设计模式重构订单消息推送功能
 
 
 
@@ -2314,23 +2686,253 @@ jvm中的缓存由于重启失效了，但redis中的缓存还保留着：
 
 
 
+在“api/message/lisenter”下面的OrderMessageLisenter类主要实现消息推送的功能。
 
+其中的consumerMessage方法在接受到消息（订单服务向消息队列中发送订单的状态消息及其信息，message服务的消费者接收到这个消息并解析出，调用dubbo服务发送这个消息）以后会创建订单消息和订单内容，然后通过send方法进行发送。从红框的部分需要通过MessageTypeEnum来判断不同的消息类型，例如：创建订单、取消订单、支付订单等，来组件消息的内容。
 
+![image-20210515134959731](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515134959731.png)
 
 
 
 
 
+---
 
+- 加入工厂模式
 
 
 
+除了消息类型和消息体内容不同，整个***生产消息发送消息的动作都是相同的***。只要创建一种机制能够**创建不同的消息**就可以了。这里让人联想到了工厂模式，如图2所示：
 
+- Factory：工厂类，简单工厂模式的核心，它负责实现创建所有实例的内部逻辑。工厂类的创建产品类的方法可以被外界直接调用，**创建所需的产品对象**。
+- IProduct：抽象产品类，简单工厂模式所创建的**所有对象的父类**，它负责**描述所有实例所共有的公共接口。**
+- Product：具体产品类，是**简单工厂模式的创建目标**。
 
+![图片2.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klqn300y0tky.png)
 
 
 
 
+
+1. 首先，将消息推送功能进行抽象，这里定义了接口OrderMesageCommand，其中定义了抽象方法send，传入参数是OrderInfo。
+2. 然后，根据这个接口定义一个Abstract类，这个类需要实现send方法。除了send 方法之外，还定义了两个抽象方法分别是`builderWxOrderMessage`和`getMessageType`。**builderWxOrderMessage用来实现订单消息体的创建**，getMessageType用来**设定消息类型**（创建订单、取消订单等）。同样这两个方法需要具体的消息类（Command）来实现。
+3. 接下来，就是具体消息类的实现了，这里列出了5个消息类，分别代表了5类订单消息推送。WaitPayOrderMessageCommand：创建订单；CancelOrderMessageCommand：取消订单；ConfirmOrderMessageCommand：确认订单；PayOrderMessageCommand：支付订单；FinishedOrderMessageCommand：完成订单。**在这5个类中需要实现builderWxOrderMessage和getMessageType方法。**
+4. AbstractOrderMessageCommand抽象类实现了doSend()方法，每个具体消息类型的发送方式是一样的，但
+5. 最后，就是OrderMessageCommandFactory类了，它作为工厂类是用来生成不同订单消息（产品）的，其中定义了create方法**传入参数是messageTypeEnum，也就是订单类型**。返回的结果是**OrderMessageCommand**，在使用工厂类的时候**只需要通过create生成订单类**，这个类的实体取决于传入的订单类型参数，然后**直接调用OrderMessageCommand的send方法就完成消息发送。**
+
+![图片3.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klqn3syx0fnr.png)
+
+
+
+
+
+---
+
+
+
+- 加入模板方法模式
+
+
+
+有了工厂模式以后就可以根据不同订单生成对应的消息推送，有新的订单消息就建立一个新的command和对应的订单类型，在工厂中定义对应的订单实现类，工厂可以根据订单类型生产出对应的订单消息类。
+
+再把目光看下**订单发送的过程**，其中有两个步骤必不可少，分别是：**生成订单消息体和发送消息**。可以将这两个步骤进行抽象，**让具体的订单实现类完成自身消息体的构建就可以了**。这让人联想到了**模版方法设计模式**。
+
+如图4所示，**抽象类定义了算法的结构**，每个算法结构的Process中包含了多个步骤：Step1、Step2、Step3。但是这些步骤并不是固定的，比如**不同的订单类型生成消息体的内容就不一样**，因此需要**将这些步骤抽象出去对其进行解耦**，让具体的实现子类去完成。在Concrete Class的实现类中去实现Abstract Class中对应的Step 步骤，例如：Step2、Step3.
+
+![图片4.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klqn5dkb05mg.png)
+
+
+
+
+
+
+
+在`AbstractOrderMessageCommand`中定义了`发送方法send()`，可以理解为模版方法中的算法接口，其包括两个Step：Step1 通过builderWxOrderMessage创建订单消息体，Step2 调用微信推送的API发送消息。
+
+对于Step2 来说是**微信发送的通用方法**，因此可以放到抽象类AbstractOrderMessageCommand中实现，不用区分具体的实现类。对于Step1 来说，需要**实现类创建对应的消息体**，因此ConfirmOrderMessageCommand**作为具体的消息推送实现类就需要实现builderWxOrderMessage方法。**
+
+![图片5.png](../picture/基于RocketMQ的互联网酒店预订系统项目/klqn62bl034g.png)
+
+先构建消息体，再发送消息。
+
+<img src="../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515142712474.png" alt="image-20210515142712474" style="zoom:67%;" />
+
+![image-20210515142643219](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515142643219.png)
+
+
+
+
+
+
+
+# 整体测试
+
+
+
+
+
+![image-20210515143449843](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515143449843.png)
+
+![image-20210515143653135](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515143653135.png)
+
+向微信推送支付成功消息：
+
+![image-20210515143719161](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515143719161.png)
+
+
+
+
+
+测试订单重复支付保存的问题：
+
+![image-20210515150424228](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515150424228.png)
+
+![image-20210515150016186](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515150016186.png)
+
+![image-20210515150000378](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515150000378.png)
+
+
+
+
+
+入住测试
+
+![image-20210515150853572](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515150853572.png)
+
+
+
+![image-20210515150940986](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515150940986.png)
+
+<img src="../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515151001099.png" alt="image-20210515151001099" style="zoom:50%;" />
+
+
+
+
+
+退房：
+
+![image-20210515151034548](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515151034548.png)
+
+
+
+![image-20210515151044913](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515151044913.png)
+
+
+
+微信端收到服务提示：订单结束
+
+![image-20210515151130945](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515151130945.png)
+
+
+
+![image-20210515151331633](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515151331633.png)
+
+订单结束的优惠券也发放了：
+
+![image-20210515151335053](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515151335053.png)
+
+
+
+
+
+整个系统测试成功!
+
+
+
+# 总结
+
+
+
+
+
+- **优化性能**
+
+在用户第一次微信登录小程序之后，系统自动给用户发放优惠券。一般的做法都是在**微信小程序登录时进行授权，之后判断是否第一次登录，后台再根据判断结果发放优惠券**。
+
+在课程中将微信登录之后，将其登录消息发送到RocketMQ中之后**接着进行后面的业务流程。这样用户操作就不会感到明显的阻塞，后台系统也能处理的更快，直接处理下一个请求**
+
+由对应的Consumer去处理登录消息，根据业务作出后续的操作，例如：发放优惠券。这种做法**提升了登录接口的性能**，让其在大流量的场景下处理更多的请求，RocketMQ充当的系统的缓冲区，从而提升系统整体性能。
+
+---
+
+- **解耦系统**
+
+传统的系统架构都是将所有业务逻辑放在一起，通过单应用的方式支撑所有业务。随着业务的复杂度提升，以及大流量高并发的场景频发，导致系统的开发部署都成分布式的趋势。
+
+因此会**将系统根据业务进行拆解**，按照模块划分应用由于**模块运行在不同的进程甚至是服务器**，那么**模块之间的沟通和信息同步就显得尤为重要**，***RocketMQ恰恰可以成为这些模块之间的桥梁***。
+
+例如用户登录模块处理完登录以后，会往MQ发一条信息，**优惠券模块会监听这个信息**，进行发放优惠券的操作，而**消息通知模块**利用这条消息可以发起**微信消息通知**，告知用户登录的情况。
+
+大家可以发挥想象，利用MQ解耦以后可以让支付模块、物流模块、积分模块各司其职又保持信息沟通的通常。
+
+---
+
+- **延迟消息**
+
+在取消订单那个章节提到了在下单超过一定时间（30分钟），用户如果还没有支付，系统会自动取消订单。
+
+> **传统的做法需要通过Job扫表的方式才能完成以上功能。**
+
+有了**RocketMQ的延迟消息**以后，用户下单预定时就会往MQ中**发送一条30分钟的延迟消息**，***Consumer在30分钟以后接受到消息***，判断订单状态是否为待支付，是则取消订单。
+
+***大大节省了系统轮询的开销，提高系统运行效率。***
+
+---
+
+- **顺序消息**
+
+预定客户下单之后，订单数据会推送到MQ供其他系统消费，从而达到进行解耦的目的。而订单状态比如下单成功、支付成功、取消预订、成功入住、成功退房等，会随着用户下单、支付、入住、退房等业务功能被更新，也就是**通过订单状态的更新让订单流转起来**。
+
+**根据订单号发送到RocketMQ订单topic的同一个MessageQueue中**，保证订单消息的顺序性，这样**消费服务受到的订单消息同样也是有序**，保证推送用户订单状态不会错乱，同时可以和系统解耦场景配合起来使用。
+
+如果发到不同的MessageQueue中，消费者在消费的时候可能会顺序错误，导致微信收到的消息通知的顺序是错乱的
+
+![image-20210515152531609](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515152531609.png)
+
+
+
+---
+
+- **消息幂等性处理**
+
+在系统中经常遇到幂等性的问题，例如：重复登录是否**发放多次优惠券**、**订单支付是否存在重复支付**的情况。
+
+在系统设计中我们使用Redis的方式，将这部分信息保存到缓存中，在执行操作的时候**从缓存中获取这部分信息，并将其与当前请求信息对比**，**保证操作的幂等性**。保存的信息中**把唯一确定记录的信息作为Key**，例如：**手机号、订单号**，将保存的内容作为Value，例如：**登录信息、订单信息**。
+
+![image-20210515152904258](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515152904258.png)
+
+![image-20210515152926164](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515152926164.png)
+
+
+
+
+
+---
+
+- **事务消息**
+
+当RocketMQ连接两个**关联性较高**的操作时，需要使用事务消息保证事务执行的一致性。记得在退房功能描述的时候，**用户完成订单和发放优惠券需要一同完成。**
+
+但是由于网络或者MQ可用性等问题，**有可能造成一个操作完成**，发送消息此时**MQ挂掉**，导致**另外一个操作接受不到消息**，从而不能执行后续步骤，最终导致订单完成了但是优惠券没有收到的尴尬局面。
+
+在加入RocketMQ的事物消息以后，完成订单状态更新以后会**发送 half 消息确定MQ运行正常**，然后再执行本地事务，**在事务提交之后再执行发送消息的操作**。这样不仅保证了MQ的可用性，也保证了整个事务的一致性。
+
+![image-20210515153114143](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515153114143.png)
+
+这个订单事务消息生产者先发送half消息验证mq可用性，随后对要进行的事务进行控制，然后使用orderMqProducer来向消息队列中发送消息通知message服务。在FinishedOrderTransactionListener中，executeLocalTransaction()方法接收到参数msg就是orderFinishedTransactionMqProducer发送的消息，但当前没有实际发出，在listener进行监听到half返回结果，对事务进行控制并执行本地事务，在本地事务执行完成并返回COMMIT后，orderFinishedTransactionMqProducer才会发送自己的消息，即：向优惠券服务发送消息，通知发送优惠券
+
+![image-20210515153125479](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515153125479.png)
+
+发送half消息确认mq运行正常，然后执行本地事务。如果本地事务执行失败，回滚所有操作。
+
+> 就不会出现本地事务执行失败，但因为mq不可用导致优惠券服务执行失败，最终整个业务逻辑不完整的情况。需要保证mq可用，然后执行本地事务，本地事务执行成功后，发送消息通知优惠券服务，如果优惠券服务执行失败，返回失败消息，那么本地的producer也会进行消息回滚，保证事务的原子性
+
+![image-20210515153140013](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515153140013.png)
+
+优惠券服务的消费者在监听这个topic，消息发出后，就执行这个消息
+
+![image-20210515155613535](../picture/基于RocketMQ的互联网酒店预订系统项目/image-20210515155613535.png)
 
 
 
