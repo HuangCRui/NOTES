@@ -2378,6 +2378,10 @@ public class UdpClient {
 
 #### 信号驱动
 
+
+
+
+
 #### 异步
 
 （阻塞IO、非阻塞IO、多路复用  都是同步的，发起read操作和接受read操作的线程都是自己）
