@@ -549,7 +549,7 @@ jar包  包含了所有的环境
 
 **导入starter场景启动器**
 
-spring-boo-starter-*,   *代表某种场景
+spring-boot-starter-*,   *代表某种场景
 
 
 
