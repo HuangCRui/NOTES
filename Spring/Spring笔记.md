@@ -1214,7 +1214,7 @@ public class UserServiceImpl  implements UserService {
 
 
 
-`@Resource`相当于@Autowired+ @Qualifier
+**`@Resource`相当于@Autowired+ @Qualifier**
 
 ```java
 //    <bean id="userService" class="service.impl.UserServiceImpl">

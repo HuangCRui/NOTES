@@ -1631,9 +1631,6 @@ public class HelloController {
 
 ```yaml
 spring:
-  mvc:
-    static-path-pattern: /res/**
-
   resources:
     static-locations: classpath:/haha/
 ```
@@ -1700,7 +1697,7 @@ https://www.webjars.org/
 
 - 静态资源路径下  index.html
 
-- - 可以配置**静态资源路径**
+  - 可以配置**默认的静态资源路径**
   - 但是**不可以配置静态资源的访问前缀**。否则导致 index.html**不能被默认访问**
 
 ```yaml
@@ -1725,7 +1722,7 @@ https://www.webjars.org/
 
 ![image-20210213174203633](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210213174203633.png)
 
-```
+```yaml
 spring:
 #  mvc:
 #    static-path-pattern: /res/**   这个会导致 Favicon 功能失效。。。。。。
@@ -1786,7 +1783,7 @@ public class WebMvcAutoConfiguration {}
     ![image-20210213181718013](../picture/SpringBoot%E7%AC%94%E8%AE%B0/image-20210213181718013.png)
 
   - ```java
-    @ConfigurationProperties("spring.web")//原先resources中的属性都改为web.resources
+    @ConfigurationProperties("spring.web")//原先spring.resources中的属性都改为spring.web.resources
     public class WebProperties {}
     ```
 
@@ -5098,23 +5095,22 @@ public class ARuiMessageConverter implements HttpMessageConverter<Person> {
 
 2. 找到适配器 `RequestMappingHandlerAdapter`
 
-   `HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());`   
-
-
-
-
+   ```
+   HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
+   ```
+   
+   
 
 3. 执行handle方法
 
-   `mv = ha.handle(processedRequest, response, mappedHandler.getHandler());`
-
-
-
-​		`mav = invokeHandlerMethod(request, response, handlerMethod);`
-
-
-
-
+   ```
+   mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+   
+   
+   mav = invokeHandlerMethod(request, response, handlerMethod);
+   ```
+   
+   
 
 4. 在 `invokeForRequest`方法中解析完参数后， 执行映射请求的方法  invoke
 
@@ -5177,11 +5173,11 @@ public class ARuiMessageConverter implements HttpMessageConverter<Person> {
 
 
 
-> 没有使用@ResponseBody来给页面返回数据
+> 这里没有使用@ResponseBody来给页面返回数据
 
 
 
-7. 使用`ViewNameMethodReturnValueHandler`
+7. 使用  `ViewNameMethodReturnValueHandler`
 
    ```java
    @Override

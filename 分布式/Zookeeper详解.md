@@ -360,7 +360,7 @@ Zookeeper中的配置文件zoo.cfg中参数含义如下：
 
 
 - **半数机制：及群众半数以上机器存活，集群可用，所以Zookeeper适合安装技术台数服务器**
-- 虽然在配置文件中并没有指定Master和Slave，但是，Zookeeper工作时，室友一个节点为Leader，其他则为Follower，Leader是通过内部的选举机制临时产生的
+- 虽然在配置文件中并没有指定Master和Slave，但是，Zookeeper工作时，只有一个节点为Leader，其他则为Follower，Leader是通过内部的选举机制临时产生的
 
 
 
@@ -872,7 +872,7 @@ public void createNode() throws KeeperException, InterruptedException {
 
 
 
-### 4.3.4 查询绩点的值
+### 4.3.4 查询节点的值
 
 
 
