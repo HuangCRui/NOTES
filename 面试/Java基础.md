@@ -999,6 +999,224 @@ public class Box<T> {
 
 
 
+
+
+
+
+## JAVA对象流序列化时的readObject，writeObject，readResolve是怎么被调用的
+
+
+
+
+
+在很多涉及到通过JAVA对象流进行序列化和反序列化时，会看到下面的方法：
+
+```java
+private void writeObject(java.io.ObjectOutputStream s)throws java.io.IOException
+
+private void readObject(java.io.ObjectInputStream s)throws java.io.IOException, ClassNotFoundException
+```
+
+
+
+
+
+在写我们的单例类时，如果使用的不是枚举的实现形式，为了保证反序列化出来后的对象，**不会破坏单例**的情况，我们还会经常看到下面的方法
+
+```
+private Object readResolve()
+```
+
+
+
+
+
+---
+
+问题来了：这些方法都是private的，并且在它们自身的类中，是没有调用的？那么到底有什么用？
+
+这里用readObject()举例：
+
+
+
+```java
+public static void main(String[] args) throws Exception {
+    Set<String> set = new HashSet<String>();
+    set.add("11111");
+    set.add("22222");
+    System.out.println(set);
+
+    try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream("C:\\set.obj"))) {
+        oos.writeObject(set);
+    }
+    
+    set.clear();
+    System.out.println(set);
+    
+    try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream("C:\\set.obj"))) {
+        set = (Set<String>) ois.readObject();
+    }
+
+    System.out.println(set);
+}
+```
+
+```
+[11111, 22222]
+[]
+[11111, 22222]
+```
+
+
+
+HashSet源码：
+
+![image-20210815194518374](../picture/Java基础/image-20210815194518374.png)
+
+整个用于保存信息的map是被用「**transient关键字**」修饰了的
+
+
+
+但是，很明显我们的信息是有**被序列化成功**的，不然反序列化出来时，原本保存在set里面的信息就丢失了。真正的实现的秘密就在于上面提到的`readObject`方法与`writeObject`方法了。
+
+这里仅简单介绍一下readObject方法，writeObject方法与其类似
+
+```java
+// HashSet.readObject
+private void readObject(java.io.ObjectInputStream s)
+    throws java.io.IOException, ClassNotFoundException {
+    // Read in any hidden serialization magic
+    s.defaultReadObject();
+
+    // Read capacity and verify non-negative.
+    int capacity = s.readInt();
+    if (capacity < 0) {
+        throw new InvalidObjectException("Illegal capacity: " +
+                                         capacity);
+    }
+
+    // Read load factor and verify positive and non NaN.
+    float loadFactor = s.readFloat();
+    if (loadFactor <= 0 || Float.isNaN(loadFactor)) {
+        throw new InvalidObjectException("Illegal load factor: " +
+                                         loadFactor);
+    }
+
+    // Read size and verify non-negative.
+    int size = s.readInt();
+    if (size < 0) {
+        throw new InvalidObjectException("Illegal size: " +
+                                         size);
+    }
+    // Set the capacity according to the size and load factor ensuring that
+    // the HashMap is at least 25% full but clamping to maximum capacity.
+    capacity = (int) Math.min(size * Math.min(1 / loadFactor, 4.0f),
+            HashMap.MAXIMUM_CAPACITY);
+
+    // Constructing the backing map will lazily create an array when the first element is
+    // added, so check it before construction. Call HashMap.tableSizeFor to compute the
+    // actual allocation size. Check Map.Entry[].class since it's the nearest public type to
+    // what is actually created.
+
+    SharedSecrets.getJavaOISAccess()
+                 .checkArray(s, Map.Entry[].class, HashMap.tableSizeFor(capacity));
+
+    // Create backing HashMap
+    map = (((HashSet<?>)this) instanceof LinkedHashSet ?
+           new LinkedHashMap<E,Object>(capacity, loadFactor) :
+           new HashMap<E,Object>(capacity, loadFactor));
+
+    // Read in all elements in the proper order.
+    for (int i=0; i<size; i++) {
+        @SuppressWarnings("unchecked")
+            E e = (E) s.readObject();
+        map.put(e, PRESENT);
+    }
+}
+```
+
+
+
+读取正常应该被序列化的字段信息后，再构造出一个map，再通过对象流，将原有通过对象流写进文件里面的map信息（容量、每个item信息等）全部读取出来，然后重新构造一个map，这样就使得我们保存在set里面的信息，在经历过对象流的序列化和反序列化后，都没有丢失。
+
+
+
+> **那么，这个是private 的 readObject方法是怎么被调用的呢？**
+
+![image-20210815200605313](../picture/Java基础/image-20210815200605313.png)
+
+为什么诸如HashSet的类里面，要写private 的readObject方法？
+
+因为对象流的读取过程中，它会通过反射的形式，调用private的readObject方法
+
+
+
+----
+
+```java
+private void readSerialData(Object obj, ObjectStreamClass desc)
+```
+
+ObjectStreamClass是什么时候产生的呢？而`readObjectMethod`这个属性又是怎么得到的呢。
+
+在`ObjectInputStream`类的`readOrdinaryObject`方法调用中：
+
+
+
+![image-20210815201238686](../picture/Java基础/image-20210815201238686.png)
+
+```java
+// java.io.ObjectStreamClass#ObjectStreamClass(java.lang.Class<?>)，获得构造器
+cons = getSerializableConstructor(cl);
+// 获得private的readObject方法对象
+readObjectMethod = getPrivateMethod(cl, "readObject",
+                            new Class<?>[] { ObjectInputStream.class },
+                            Void.TYPE);
+
+
+readResolveMethod = getInheritableMethod(cl, "readResolve", null, Object.class);
+```
+
+
+
+
+
+ObjectInputStream类的readOrdinaryObject方法，在调用完readSerialData（）方法后，就调用了 ObjectStreamClass类的Object invokeReadResolve(Object obj)方法，通过反射调用了我们自己写的readResolve方法
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Java 复制
 
 
@@ -1067,6 +1285,33 @@ public class Box<T> {
 
 
 
+# 静态变量/方法
+
+> **静态：**
+>
+> 在编译之后所分配的内存会一直存在（不会被回收），直到程序退出内存才会释放这个空间。
+>
+> static类型的变量是归「类」所有，不是「类的实例」所有
+>
+> 类名和实例名均可引用，但具体引用的static变量/ 方法，是根据当前实例赋给的类来判断：
+>
+> ```
+> Father son = new Son();
+> ```
+>
+> 这一句在引用静态变量时，实际是使用父类的静态变量/方法
+
+在一个类中定义一个方法为static，那就是说，无需本类的对象即可调用此方法，关于static方法，声明为static的方法有以下几条限制：
+
+- 它们仅能调用其他的static 方法。
+- 它们只能访问static数据。
+- 它们不能以任何方式引用this 或super。
+
+
+
+**当子类没有与之同名的 static 变量/方法时，子类的对象也可以操控这块内存空间。**
+
+:warning: 但是子类**「没有继承」**父类中static修饰的变量和方法。因为static修饰的变量和方法**是属于父类本身的**。
 
 
 
@@ -1074,44 +1319,123 @@ public class Box<T> {
 
 
 
+## static方法是否存在多态？
+
+
+
+父类：
+
+```java
+public class Parent {
+    public static void  staticMethod(){
+        System.out.println("Parent staticMethod run");
+
+    }
+    public void method(){
+        System.out.println("Parent method run");
+
+    }
+}
+```
+
+子类：
+
+```java
+public class Son extends Parent {
+    public static void  staticMethod(){
+        System.out.println("Son staticMethod run");
+
+    }
+    public void method(){
+        System.out.println("Son method run");
+    }
+}
+```
+
+测试：
+
+```java
+public class Test {
+
+    public static void main(String[] args) {
+        // 赋予的是子类实例，但类型是父类，所以调用的是父类的static方法
+        Parent child=new Son();
+        child.staticMethod();//输出：Parent staticMethod run
+
+        Son s=new Son();
+        s.staticMethod();
+        child.method();//这样才存在多态        
+    }
+}
+```
+
+结果：
+
+```
+Parent staticMethod run 
+Son staticMethod run 
+Son method run
+```
+
+
+
+对于静态方法在子类中是不存在“重写”这一说的。
+
+用static关键字修饰的方法和变量都是**属于类自己本身的，而不属于「实例对象」**，即使存在继承关系，子类并没有继承父类的static修饰的变量和方法
+
+因此也是不存在多态特性的。而对于普通方法的调用是存在“重写”而最终呈现出多态特性的。
+
+----
+
+因为静态方法从程序开始运行后就已经分配了内存，也就是说已经写死了。所有引用到该方法的对象（父类的对象也好子类的对象也好）**所指向的都是同一块内存中的数据**，也就是该静态方法。子类中如果定义了相同名称的静态方法，并不会重写，而应该是**在内存中又分配了一块给子类的静态方法**，没有重写这一说，我们应该称之为「**隐藏**」。
+
+---
+
+:star:
+
+- 对于static修饰的变量，当子类与父类中存在相同的static变量时，也是根据「**静态引用**」，而不是根据动态引用来调用相应的变量的
+- 在父类和子类中对于非static变量和方法，是根据“动态引用”来调用相应的变量和方法。
 
 
 
 
 
+## 子类继承父类的static变量/方法？
 
 
 
+```java
+public class Parent {
+    public static void  staticMethod(){
+        System.out.println("Parent staticMethod run");
+
+    }
+
+}
+public class Son extends Parent {
+    //...
+}
+```
 
 
 
+```java
+public class Test {
+    public static void main(String[] args) {
+        Parent child=new Son();
+        child.staticMethod();//输出：Parent staticMethod run   
+        Son s=new Son();
+        s.staticMethod();//输出：Parent staticMethod run   
+    }
+}
+```
 
+get：父类的 static 方法是可以被子类访问的。
 
+注意：
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- 不是「继承」，而是「可访问」，**具体要看这个对象赋给的类，而不是实际的实例对象的类**
+- 子类和父类中同名的static变量和方法，都是相互独立的，**并不存在任何重写关系**
 
 
 

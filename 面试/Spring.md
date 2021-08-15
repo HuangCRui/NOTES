@@ -415,7 +415,7 @@ WebApplicationContext 是专门为 Web 应用准备的，允许从相对于 **We
 
 
 
-Spring 3 中位 Bean定义了五种作用域：
+Spring 3 中为 Bean定义了五种作用域：
 
 - singleton 单例
 - prototype 原型
