@@ -1166,15 +1166,39 @@ ObjectStreamClass是什么时候产生的呢？而`readObjectMethod`这个属性
 ![image-20210815201238686](../picture/Java基础/image-20210815201238686.png)
 
 ```java
-// java.io.ObjectStreamClass#ObjectStreamClass(java.lang.Class<?>)，获得构造器
+// java.io.ObjectStreamClass#ObjectStreamClass(java.lang.Class<?>)，ObjectStreamClass的构造函数
+
 cons = getSerializableConstructor(cl);
-// 获得private的readObject方法对象
+// 获得private的readObject方法对象,方法名：readObject，方法参数类型：ObjectInputStream.class，方法返回类型：void
+// 前两个是用于获取方法，返回类型判断是否是所需方法
 readObjectMethod = getPrivateMethod(cl, "readObject",
                             new Class<?>[] { ObjectInputStream.class },
                             Void.TYPE);
 
-
+// 反射拿到readResolve方法
 readResolveMethod = getInheritableMethod(cl, "readResolve", null, Object.class);
+```
+
+
+
+```java
+//ObjectInputStream#readOrdinaryObject方法
+//得到ObjectStreamClass对象
+ObjectStreamClass desc = readClassDesc(false);
+//得到所需的对象实例
+obj = desc.isInstantiable() ? desc.newInstance() : null;
+readSerialData(obj, desc);
+
+//ObjectInputStream#readSerialData方法
+slotDesc.invokeReadObject(obj, this);
+```
+
+
+
+```java
+//java.io.ObjectStreamClass# invokeReadObject
+// 反射调用，执行readObject方法
+readObjectMethod.invoke(obj, new Object[]{ in });
 ```
 
 

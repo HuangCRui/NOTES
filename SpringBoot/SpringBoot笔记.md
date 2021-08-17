@@ -1918,6 +1918,8 @@ spring:
 
 
 
+
+
 ```java
 @Bean
 public WelcomePageHandlerMapping welcomePageHandlerMapping(ApplicationContext applicationContext,
