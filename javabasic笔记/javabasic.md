@@ -1163,10 +1163,11 @@ public void pass(String name) {
 * <u>***子类要重写父类的方法***</u>
 * <u>***父类的引用指向子类的对象。***</u>
 
-```
-Parent p = new Son();
+```java
+Parent p = new Son1();
 p.call();
-“IM Son”
+
+“IM Son1”
 ```
 
 是Parent类的实例，p.call()调用的是Son类的实现
@@ -1189,7 +1190,7 @@ p.call();
 
 想换成HashTable实现，可以    Map< String,String> map = new HashTable < String,String>();
 
-         其中，始终是**map对象来引用其子类对象**
+其中，始终是**map对象来引用其子类对象**
 
 比如写一个方法，参数要求传递List类型，你就可以用**List** list = new **ArrayList**()中的list传递，但是你写成**ArrayList** list = new ArrayList()是传递不进去的。尽管方法处理时都一样。另外，方法还可以根据你传递的不同list（ArrayList或者LinkList）进行不同处理。
 
@@ -1201,7 +1202,13 @@ p.call();
 
 父类的引用可以指向子类的对象；
 
-为什么子类的引用不能用来指向父类的对象呢？“狗是一种动物”√     “动物是一种狗”×
+为什么子类的引用不能用来指向父类的对象呢？
+
+> :zap:
+>
+> “狗是一种动物”√    
+>
+>  “动物是一种狗”×
 
 **从属不能颠倒   父类的引用指向子类的对象时，该对象只是看成一种特殊的父类（里面有重写的方法和属性）**
 
