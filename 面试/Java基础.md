@@ -1057,9 +1057,9 @@ private void readObject(java.io.ObjectInputStream s)throws java.io.IOException, 
 
 
 
-在写我们的单例类时，如果使用的不是枚举的实现形式，为了保证反序列化出来后的对象，**不会破坏单例**的情况，我们还会经常看到下面的方法
+在写我们的单例类时，如果使用的不是**枚举**的实现形式，为了保证反序列化出来后的对象，**不会破坏单例**的情况，我们还会经常看到下面的方法
 
-```
+```java
 private Object readResolve()
 ```
 
@@ -1113,9 +1113,17 @@ HashSet源码：
 
 
 
-但是，很明显我们的信息是有**被序列化成功**的，不然反序列化出来时，原本保存在set里面的信息就丢失了。真正的实现的秘密就在于上面提到的`readObject`方法与`writeObject`方法了。
+但是，很明显我们的信息是有**被序列化成功**的，不然反序列化出来时，原本保存在set里面的信息就丢失了。
+
+**真正的实现的秘密就在于上面提到的`readObject`方法与`writeObject`方法了**
+
+
+
+----
 
 这里仅简单介绍一下readObject方法，writeObject方法与其类似
+
+
 
 ```java
 // HashSet.readObject
@@ -1173,7 +1181,7 @@ private void readObject(java.io.ObjectInputStream s)
 
 
 
-读取正常应该被序列化的字段信息后，再构造出一个map，再通过对象流，将原有通过对象流写进文件里面的map信息（容量、每个item信息等）全部读取出来，然后重新构造一个map，这样就使得我们保存在set里面的信息，在经历过对象流的序列化和反序列化后，都没有丢失。
+读取正常应该被序列化的字段信息后，**再构造出一个map**，再通过对象流，将原有通过对象流写进文件里面的**map信息**（容量、每个item信息等）全部读取出来，然后**重新构造一个map**，这样就使得我们保存在set里面的信息，在经历过对象流的序列化和反序列化后，都没有丢失。
 
 
 
@@ -1181,9 +1189,10 @@ private void readObject(java.io.ObjectInputStream s)
 
 ![image-20210815200605313](../picture/Java基础/image-20210815200605313.png)
 
-为什么诸如HashSet的类里面，要写private 的readObject方法？
-
-因为对象流的读取过程中，它会通过反射的形式，调用private的readObject方法
+> 为什么诸如HashSet的类里面，要写private 的readObject方法？
+>
+> 因为对象流的读取过程中，它会通过**「反射」**的形式，调用private的readObject方法
+>
 
 
 
@@ -1225,19 +1234,16 @@ ObjectStreamClass desc = readClassDesc(false);
 obj = desc.isInstantiable() ? desc.newInstance() : null;
 readSerialData(obj, desc);
 
-//ObjectInputStream#readSerialData方法
+//调用readResolve方法
+Object rep = desc.invokeReadResolve(obj);
+
+//ObjectInputStream#readSerialData方法，在readOrdinaryObject方法中
 slotDesc.invokeReadObject(obj, this);
-```
 
-
-
-```java
 //java.io.ObjectStreamClass# invokeReadObject
 // 反射调用，执行readObject方法
 readObjectMethod.invoke(obj, new Object[]{ in });
 ```
-
-
 
 
 
@@ -1247,11 +1253,63 @@ ObjectInputStream类的readOrdinaryObject方法，在调用完readSerialData（�
 
 
 
+## 反序列化机制破解单例模式
 
 
 
+**枚举除外**
 
 
+
+```java
+public class BreakSingleton{
+
+  public static void main(String[] args) throws Exception{
+
+     //先根据单例模式创建对象(单例模式所以s1,s2是一样的)
+     Singleton s1=Singleton.getInstance();
+     Singleton s2=Singleton.getInstance();
+
+//将s1写入本地某个路径
+     FileOutputStream fos=new FileOutputStream("本地某个路径下文件");
+     ObjectOutputStream oos=new ObjectOutputStream(fos);
+     oos.writeObject(s1);
+     oos.close();
+     fos.close();
+
+//从本地某个路径读取写入的对象
+     ObjectInputStream ois=new ObjectInputStream(new FileInputStream("和上面的本地参数路径相同"));
+    Singleton s3=(Singleton) ois.readObject();
+     System.out.println(s1);
+     System.out.println(s2);
+     System.out.println(s3);//s3是一个新对象
+}
+ 
+}
+```
+
+
+
+避免实现序列化单例模式的漏洞：
+
+```java
+class Singleton implements Serializable{
+
+    private static final Singleton singleton = new Singleton(); 
+
+    private Singleton() {
+    }
+    public static Singleton getInstance(){
+        return singleton;
+    }
+
+
+    //反序列化定义该方法，则不需要创建新对象
+    private Object readResolve() throws ObjectStreamException{
+        return singleton;
+    }
+}
+```
 
 
 
@@ -2553,6 +2611,429 @@ public class SingletonObject {
     
 }
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Java代理模式
+
+
+
+https://www.cnblogs.com/cC-Zhou/p/9525638.html
+
+作为对《java反射》部分代理内容的补充，以及更全面的解释
+
+
+
+![image-20210915174635185](../picture/Java基础/image-20210915174635185.png)
+
+
+
+1. 用户只关心**「接口功能」**，而不在乎谁提供了功能
+2. 接口真正实现者是上图的 RealSubject，但是它**<u>不与用户直接接触</u>**，而是通过代理。
+3. 代理就是上图中的 Proxy，由于它实现了 Subject 接口，所以它能够直接与用户接触。
+4. 用户调用 Proxy 的时候，**<u>Proxy 内部调用了 RealSubject</u>**。所以，Proxy 是中介者，它可以**增强 RealSubject 操作**。
+
+
+
+
+
+**重点在增强原实现类的操作，添加一些新的方法进去**
+
+> 和装饰器模式的区别：装饰器模式为了增强功能，而代理模式是为了加以控制。
+>
+> 其实「**差不多**」。。。。吧？
+
+
+
+
+
+## 静态代理
+
+
+
+
+
+**代理模式可以在不修改被代理对象的基础上，通过扩展代理类，进行一些功能的附加与增强。**
+
+> **代理类和被代理类应该共同实现一个接口，或者是共同继承某个类**
+
+
+
+
+
+> 为什么叫做静态呢？因为它的类型是事先预定好的
+
+
+
+
+
+
+
+## 动态代理
+
+
+
+
+
+
+
+动态代理中的动态体现在什么地方？
+
+可以让程序在运行的时候自动在内存中创建一个实现接口类的代理，而不需要去手动定义 Proxy 这个代理实现类
+
+
+
+
+
+---
+
+**动态代理语法**
+
+
+
+涉及一个类 Proxy，通过 Proxy 的静态方法 newProxyInstance 才会动态创建代理
+
+
+
+----
+
+**Proxy**
+
+```java
+public static Object newProxyInstance(ClassLoader loader, Class<?>[] interfaces, InvocationHandler h)
+```
+
+- loader 自然是类加载器
+- interfaces 代码要用来代理的接口(**java可以多实现，所以可以是一个接口的数组**)
+- h 一个 InvocationHandler 对象
+
+
+
+
+
+---
+
+**InvocationHandler**
+
+InvocationHandler 是一个接口，官方文档解释说，每个**代理的实例**都有一个与之关联的 **InvocationHandler 实现类**，如果**代理的方法被调用**，那么代理便会**通知和转发给内部的 InvocationHandler 实现类**，由它**决定处理**。
+
+```java
+public interface InvocationHandler {
+
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable;
+}
+```
+
+
+
+InvocationHandler 内部只是一个 invoke() 方法，正是这个方法决定了怎么样处理代理传递过来的方法调用。
+
+- proxy 代理对象
+- method 代理对象调用的方法
+- args 调用的方法中的参数
+
+
+
+**Proxy 动态产生的代理会调用 InvocationHandler 实现类，所以 InvocationHandler 是实际执行者。**
+
+
+
+```java
+public class GuitaiA implements InvocationHandler {
+
+    // 这里使用 Object，可以接受任何类型接口的对象，最终在调用 invoke 时就会调用对应的方法，不会被一个特定的接口来限制，同样是通过 Proxy.newProxyInstance() 方法，却可以产生 接口A 和 接口B 两种接口的实现类代理，这就是动态代理的魔力。
+    private Object pingpai;
+
+
+    public GuitaiA(Object pingpai) {
+        this.pingpai = pingpai;
+    }
+
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args)
+            throws Throwable {
+        // TODO Auto-generated method stub
+        System.out.println("销售开始  柜台是： "+this.getClass().getSimpleName());
+        method.invoke(pingpai, args);
+        System.out.println("销售结束");
+        return null;
+    }
+
+}
+```
+
+
+
+
+
+
+
+## 动态代理原理
+
+
+
+
+
+
+
+```java
+public static Object newProxyInstance(ClassLoader loader, Class<?>[] interfaces, InvocationHandler h)
+        throws IllegalArgumentException
+{
+    Objects.requireNonNull(h);
+
+    final Class<?>[] intfs = interfaces.clone();
+
+
+    /*
+    * Look up or generate the designated proxy class.
+      创造出的这个类实现了给定的所有接口
+    */
+    Class<?> cl = getProxyClass0(loader, intfs);
+
+    /*
+     * Invoke its constructor with the designated invocation handler.
+     */
+    try {
+
+        // 获得这个cl的构造器
+        final Constructor<?> cons = cl.getConstructor(constructorParams);
+        final InvocationHandler ih = h;
+        if (!Modifier.isPublic(cl.getModifiers())) {
+            AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                public Void run() {
+                    cons.setAccessible(true);
+                    return null;
+                }
+            });
+        }
+		
+        // 创建新实例
+        return cons.newInstance(new Object[]{h});
+
+    } catch (IllegalAccessException|InstantiationException e) {
+        throw new InternalError(e.toString(), e);
+    } catch (InvocationTargetException e) {
+        Throwable t = e.getCause();
+        if (t instanceof RuntimeException) {
+            throw (RuntimeException) t;
+        } else {
+            throw new InternalError(t.toString(), t);
+        }
+    } catch (NoSuchMethodException e) {
+        throw new InternalError(e.toString(), e);
+    }
+}
+```
+
+
+
+newProxyInstance 的确创建了一个实例，它是通过 cl 这个 Class 文件的构造方法反射生成。cl 由 getProxyClass0() 方法获取。
+
+
+
+```java
+private static Class<?> getProxyClass0(ClassLoader loader,
+                                       Class<?>... interfaces) {
+    if (interfaces.length > 65535) {
+        throw new IllegalArgumentException("interface limit exceeded");
+    }
+
+    // If the proxy class defined by the given loader implementing
+    // the given interfaces exists, this will simply return the cached copy;
+    // otherwise, it will create the proxy class via the ProxyClassFactory
+    return proxyClassCache.get(loader, interfaces);
+}
+```
+
+直接通过缓存获取，如果获取不到，注释说会通过 ProxyClassFactory 生成。
+
+
+
+```java
+/**
+     * A factory function that generates, defines and returns the proxy class given
+     * the ClassLoader and array of interfaces.
+     */
+private static final class ProxyClassFactory
+    implements BiFunction<ClassLoader, Class<?>[], Class<?>>
+{
+    
+    // Proxy class 的前缀是 “$Proxy”，
+    private static final String proxyClassNamePrefix = "$Proxy";
+
+    // next number to use for generation of unique proxy class names
+    private static final AtomicLong nextUniqueNumber = new AtomicLong();
+
+    @Override
+    public Class<?> apply(ClassLoader loader, Class<?>[] interfaces) {
+
+        Map<Class<?>, Boolean> interfaceSet = new IdentityHashMap<>(interfaces.length);
+        for (Class<?> intf : interfaces) {
+            /*
+                 * Verify that the class loader resolves the name of this
+                 * interface to the same Class object.
+                 */
+            Class<?> interfaceClass = null;
+            try {
+                interfaceClass = Class.forName(intf.getName(), false, loader);
+            } catch (ClassNotFoundException e) {
+            }
+            if (interfaceClass != intf) {
+                throw new IllegalArgumentException(
+                    intf + " is not visible from class loader");
+            }
+            /*
+                 * Verify that the Class object actually represents an
+                 * interface.
+                 */
+            if (!interfaceClass.isInterface()) {
+                throw new IllegalArgumentException(
+                    interfaceClass.getName() + " is not an interface");
+            }
+            /*
+                 * Verify that this interface is not a duplicate.
+                 */
+            if (interfaceSet.put(interfaceClass, Boolean.TRUE) != null) {
+                throw new IllegalArgumentException(
+                    "repeated interface: " + interfaceClass.getName());
+            }
+        }
+
+        String proxyPkg = null;     // package to define proxy class in
+        int accessFlags = Modifier.PUBLIC | Modifier.FINAL;
+
+        /*
+             * Record the package of a non-public proxy interface so that the
+             * proxy class will be defined in the same package.  Verify that
+             * all non-public proxy interfaces are in the same package.
+             */
+        for (Class<?> intf : interfaces) {
+            int flags = intf.getModifiers();
+            if (!Modifier.isPublic(flags)) {
+                accessFlags = Modifier.FINAL;
+                String name = intf.getName();
+                int n = name.lastIndexOf('.');
+                String pkg = ((n == -1) ? "" : name.substring(0, n + 1));
+                if (proxyPkg == null) {
+                    proxyPkg = pkg;
+                } else if (!pkg.equals(proxyPkg)) {
+                    throw new IllegalArgumentException(
+                        "non-public interfaces from different packages");
+                }
+            }
+        }
+
+        if (proxyPkg == null) {
+            // if no non-public proxy interfaces, use com.sun.proxy package
+            proxyPkg = ReflectUtil.PROXY_PACKAGE + ".";
+        }
+
+        /*
+             * Choose a name for the proxy class to generate.
+             */
+        long num = nextUniqueNumber.getAndIncrement();
+        String proxyName = proxyPkg + proxyClassNamePrefix + num;
+
+        /*
+             * Generate the specified proxy class.
+             */
+        byte[] proxyClassFile = ProxyGenerator.generateProxyClass(
+            proxyName, interfaces, accessFlags);
+        try {
+            return defineClass0(loader, proxyName,
+                                proxyClassFile, 0, proxyClassFile.length);
+        } catch (ClassFormatError e) {
+            /*
+                 * A ClassFormatError here means that (barring bugs in the
+                 * proxy class generation code) there was some other
+                 * invalid aspect of the arguments supplied to the proxy
+                 * class creation (such as virtual machine limitations
+                 * exceeded).
+                 */
+            throw new IllegalArgumentException(e.toString());
+        }
+    }
+}
+```
+
+
+
+
+
+通过指定的 ClassLoader 和 接口数组 用工厂方法生成 proxy class。 然后这个 proxy class 的名字是：
+
+```java
+// Proxy class 的前缀是 “$Proxy”，
+private static final String proxyClassNamePrefix = "$Proxy";
+
+long num = nextUniqueNumber.getAndIncrement();
+
+String proxyName = proxyPkg + proxyClassNamePrefix + num;
+```
+
+所以，动态生成的代理类名称是**「包名+$Proxy+id序号」**
+
+![image-20210915222059580](../picture/Java基础/image-20210915222059580.png)
+
+生成的过程，核心代码如下：
+
+```java
+byte[] proxyClassFile = ProxyGenerator.generateProxyClass( proxyName, interfaces, accessFlags);
+
+
+return defineClass0(loader, proxyName, proxyClassFile, 0, proxyClassFile.length);
+```
+
+
+
+> defineClass0() 甚至是一个 **native 方法**。我们只要知道，动态创建代理这回事就好了。
+
+SellWine 接口的代理类名是：`com.sun.proxy.$Proxy0`
+SellCigarette 接口的代理类名是：`com.sun.proxy.$Proxy1`
+
+这说明动态生成的 proxy class 与 Proxy 这个类同一个包。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
