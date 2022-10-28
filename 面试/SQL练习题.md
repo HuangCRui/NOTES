@@ -1,6 +1,6 @@
 
 
-
+# 练习题
 
 ## 聚合函数相关
 
@@ -1082,6 +1082,50 @@ select dept_no, group_concat(emp_no SEPARATOR ',') from dept_emp group by dept_n
 
 
 
+# sql操作
+
+
+
+
+
+
+
+### union&union all
+
+
+
+
+
+union和union all的区别是,union会**自动压缩**多个结果集合中的重复结果，而union all则将所有的结果全部显示出来，**不管是不是重复**。
+
+Union：对两个**结果集**进行**并集操作**，不包括重复行，同时进行默认规则的排序；
+UNION在进行表链接后会筛选掉重复的记录，所以在表链接后会对所产生的结果集进行排序运算，删除重复的记录再返回结果。
+
+
+
+> **一般union这两个操作都是在查询出结果以后才能进行合并操作，并且在结果列对应的情况才行，因为union操作会将第二个结果直接合并在第一个下，字段名也会跟随第一个结果**
+
+
+
+
+
+
+
+----
+
+union使用
+
+
+
+![image-20220921175224564](../picture/SQL练习题/image-20220921175224564.png)
+
+需要是两次查询结果进行union操作，而不能像上图一样一个是表c，一个是select *后的查询结果
+
+
+
+这样就可以
+
+![image-20220921175414709](../picture/SQL练习题/image-20220921175414709.png)
 
 
 
@@ -1093,6 +1137,72 @@ select dept_no, group_concat(emp_no SEPARATOR ',') from dept_emp group by dept_n
 
 
 
+### like concat & like
+
+
+
+```mysql
+select * from tree1 where path like CONCAT('%','6')
+```
+
+拼接结果，防止sql注入：
+
+```mysql
+-- 后端这样使用：，传入num
+select * from tree1 where path like CONCAT('%',#{num})   
+```
+
+
+
+### substring_index,left,right
+
+
+
+```
+substring_index(string,sep,num)
+substring_index(字符串,分隔符,序号)
+
+
+参数说明
+
+string：用于截取目标字符串的字符串。可为字段，表达式等。
+
+sep：分隔符，string存在且用于分割的字符，比如“，”、“.”等。
+
+num：序号，为非0整数。若为整数则表示从左到右数，若为负数则从右到左数。
+
+比如“www.mysql.com”截取字符‘www’，分割符为“.”，从左到右序号为1，即substring_index("www.mysql.com",'.',1)；
+
+若从右开始获取“com”则为序号为-1即substring_index("www.mysql.com",'.',-1)
+```
+
+
+
+
+
+---
+
+
+
+```
+LEFT(str,len)
+```
+
+str: 给定的字符串，将从其左侧提取字符
+
+len: 要提取的字符数，如果此参数大于字符串中的字符数，则此函数将返回实际的字符串
+
+注意: **如果任一参数为Null，结果返回Null**
+
+```
+SELECT LEFT('2019-01-30',NULL);
+SELECT LEFT(NULL,3);
+结果为NULL;
+```
+
+
+
+> [SUBSTRING](http://www.yiibai.com/mysql/substring.html)(或[SUBSTR](http://www.yiibai.com/mysql/substring.html))函数也提供与`LEFT`函数相同的功能。
 
 
 
@@ -1100,6 +1210,130 @@ select dept_no, group_concat(emp_no SEPARATOR ',') from dept_emp group by dept_n
 
 
 
+### group_concat()
+
+
+
+将分组中括号里对应的字符串进行连接.如果分组中括号里的参数xxx有多行，那么就会将这多行的字符串连接，每个字符串之间会有特定的符号进行分隔
+
+```mysql
+# 将分组中column1这一列对应的多行的值按照column2 升序或者降序进行连接，其中分隔符为seq
+# 如果用到了DISTINCT，将表示将不重复的column1按照column2升序或者降序连接
+# 如果没有指定SEPARATOR的话，也就是说没有写，那么就会默认以 ','分隔
+GROUP_CONCAT([DISTINCT] column1 [ORDER BY column2 ASC\DESC] [SEPARATOR seq]);
+
+```
+
+- [ ORDER BY column2 ASC\DESC] :表示将会根据column2升序或者降序连接.其中column2不一定一定要求是column1,只要**保证column2在这个分组**中即可.如果没有写ORDER BY句段，那么**连接是没有顺序的**。
+- [ SEPARATOR seq] : 表示各个column1将会以什么分隔符进行分隔，例如SEPARATOR '’,则表示column1将会以进行分隔。如果没有指定seq的时候，也即没有写SEPARATOR seq这个句段，那么就会默认是以","分隔的。
+
+> **排序规则的字段一定是需要在当前分组内，**
+
+
+
+**CONCAT函数中要连接的数据含有NULL，最后返回的是NULL，但是GROUP_CONCAT不会这样，他会忽略NULL值。**
+
+
+
+---
+
+:chestnut:
+
+```mysql
+    mysql> SELECT * FROM employee2;
+      +----+-----------+------+---------+---------+
+      | id | name      | age  | salary  | dept_id |
+      +----+-----------+------+---------+---------+
+      |  3 | 小肖      |   29 | 30000.0 |       1 |
+      |  4 | 小东      |   30 | 40000.0 |       2 |
+      |  6 | 小非      |   24 | 23456.0 |       3 |
+      |  7 | 晓飞      |   30 | 15000.0 |       4 |
+      |  8 | 小林      |   23 | 24000.0 |    NULL |
+      | 10 | 小五      |   20 |  4500.0 |    NULL |
+      | 11 | 张山      |   24 | 40000.0 |       1 |
+      | 12 | 小肖      |   28 | 35000.0 |       2 |
+      | 13 | 李四      |   23 | 50000.0 |       1 |
+      | 17 | 王武      |   24 | 56000.0 |       2 |
+      | 18 | 猪小屁    |    2 | 56000.0 |       2 |
+      | 19 | 小玉      |   25 | 58000.0 |       1 |
+      | 21 | 小张      |   23 | 50000.0 |       1 |
+      | 22 | 小胡      |   25 | 25000.0 |       2 |
+      | 96 | 小肖      |   19 | 35000.0 |       1 |
+      | 97 | 小林      |   20 | 20000.0 |       2 |
+      +----+-----------+------+---------+---------+
+      16 rows in set (0.16 sec)
+      
+      mysql> SELECT
+          -> dept_id,
+          -> GROUP_CONCAT(name ORDER BY age DESC SEPARATOR '*') -- 分组中的name中的多行数据将按照age降序进行连接，分隔符为 * 
+          -> FROM employee2
+          -> GROUP BY dept_id; -- 注意如果这里没有GROUP BY dept_id，那么就会因为输出dept_id而发生报错，行数不对应，dept_id是所有的数据都有，但GROUP_CONCAT拼接出的数据只有一个，所以需要分组
+      +---------+----------------------------------------------------+
+      | dept_id | GROUP_CONCAT(name ORDER BY age DESC SEPARATOR '*') |
+      +---------+----------------------------------------------------+
+      |    NULL | 小林*小五                                           |
+      |       1 | 小肖*小玉*张山*小张*李四*小肖                          |
+      |       2 | 小东*小肖*小胡*王武*小林*猪小屁                         |
+      |       3 | 小非                                                |
+      |       4 | 晓飞                                                |
+      +---------+----------------------------------------------------+
+      
+      
+      mysql> SELECT
+          -> GROUP_CONCAT(name SEPARATOR '*') 
+          -> FROM employee2; -- 这时候虽然没有使用GROUP BY，但是可以正常运行，此时是将所有的name连接,连接时为无序,分隔符为*
+      +-------------------------------------------------------------------------------------------------------+
+      | GROUP_CONCAT(name SEPARATOR '*')                                                                      | 
+      +--------------------------------------------------------------------------------------------------------
+      | 小肖*小东*小非*晓飞*小林*小五*张山*小肖*李四*王武*猪小屁*小玉*小张*小胡*小肖*小林                                | 
+      +-------------------------------------------------------------------------------------------------------+
+      1 row in set (0.00 sec)
+      
+      mysql> SELECT
+          -> GROUP_CONCAT(DISTINCT name SEPARATOR '*') -- 将不同的name进行连接
+          -> FROM employee2;
+      +-----------------------------------------------------------------------------------------------+
+      | GROUP_CONCAT(DISTINCT name SEPARATOR '*')                                                     |
+      +-----------------------------------------------------------------------------------------------+
+      | 小东*小五*小张*小林*小玉*小肖*小胡*小非*张山*晓飞*李四*猪小屁*王武                            |
+      +-----------------------------------------------------------------------------------------------+
+      1 row in set (0.00 sec)
+      
+      
+      mysql> SELECT
+          -> dept_id,
+          -> GROUP_CONCAT(name) AS employees
+          -> FROM employee2
+          -> GROUP BY dept_id; -- 输出每个部门的员工，每个员工之间用逗号分隔，因为没有写SEPARATOR ，所以就默认以逗号分隔
+      +---------+----------------------------------------------+
+      | dept_id | employees                                    |
+      +---------+----------------------------------------------+
+      |    NULL | 小林,小五                                    |
+      |       1 | 小肖,张山,李四,小玉,小张,小肖                |
+      |       2 | 小东,小肖,王武,猪小屁,小胡,小林              |
+      |       3 | 小非                                         |
+      |       4 | 晓飞                                         |
+      +---------+----------------------------------------------+
+      5 rows in set (0.00 sec)
+      
+      mysql> SELECT
+          -> dept_id,
+          -> GROUP_CONCAT(DISTINCT name) -- 将不同的name连接，并且用逗号分隔
+          -> AS employees
+          -> FROM  employee2
+          -> GROUP BY dept_id;
+      +---------+----------------------------------------------+
+      | dept_id | employees                                    |
+      +---------+----------------------------------------------+
+      |    NULL | 小五,小林                                    |
+      |       1 | 小张,小玉,小肖,张山,李四                     |
+      |       2 | 小东,小林,小肖,小胡,猪小屁,王武              |
+      |       3 | 小非                                         |
+      |       4 | 晓飞                                         |
+      +---------+----------------------------------------------+
+      5 rows in set (0.00 sec)
+
+```
 
 
 
@@ -1107,32 +1341,76 @@ select dept_no, group_concat(emp_no SEPARATOR ',') from dept_emp group by dept_n
 
 
 
+### concat_ws
 
 
 
 
 
+CONCAT_WS(separator,str1,str2,…)
+
+CONCAT_WS() 代表 `CONCAT With Separator` ，是CONCAT()的特殊形式。第一个参数是其它参数的分隔符。分隔符的位置放在要连接的两个字符串之间。分隔符可以是一个字符串，也可以是其它参数。如果分隔符为 NULL，则结果为 NULL。函数会忽略任何分隔符参数后的 NULL 值。但是CONCAT_WS()不会忽略任何空字符串。 (然而会忽略所有的 NULL）。
+
+```mysql
+SELECT CONCAT_WS(',','First name',NULL,'Last Name');
+```
+
+返回结果为
+
+```mysql
++----------------------------------------------+
+| CONCAT_WS(',','First name',NULL,'Last Name') |
++----------------------------------------------+
+| First name,Last Name             			  |
++----------------------------------------------+
+```
 
 
 
 
 
+### left join / right join
 
 
 
 
 
+经常会遇到多表查询问题
+
+两张表联结查询，a表存储id等基本信息，b表存详细信息：时间等
 
 
 
+此时要根据时间范围来查询a、b表信息。
+
+```mysql
+select * from a left join 
+(
+	select * from b where b.date between x and y
+)
+on a.id = b.id
+```
 
 
 
+> 不要**<u>乱用</u>**left / right join....
+>
+> 不如直接多表查询
+
+这样结果会显示a. *和b. *，**因为是按照两个表的id进行连接，并且以a为准**
+
+> **以a表为准：** 不管b的筛选条件如何，都以两表联结的条件on为准，其他字段如果没有，就**显示null**，只要a表数据有就行,
+>
+> 
 
 
 
+对这种情况，
 
+- 可以用 right join，筛选b表的数据行并为基准匹配a表
 
+- 或者用普通的inner join
+- **不要在 left join语句里面进行where筛选操作**，在整个语句的外面进行where判断，
 
 
 

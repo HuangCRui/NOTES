@@ -8691,6 +8691,7 @@ public interface CityMapper {
 ```java
 @Autowired
 CityService cityService;
+
 @GetMapping("/city")
 @ResponseBody
 public City getCityById(Long id){
@@ -8768,10 +8769,6 @@ public void insert(City city);
 
 建议安装 **MybatisX** 插件
 
-
-
-
-
 ```xml
     <dependency>
         <groupId>com.baomidou</groupId>
@@ -8839,6 +8836,7 @@ public interface UsersMapper extends BaseMapper<Users> {
 ```java
 @Autowired
 UsersMapper usersMapper;
+
 @Test
 public void testUsersMapper(){
     Users users = usersMapper.selectById(3L);
@@ -8852,7 +8850,7 @@ public void testUsersMapper(){
 
 
 
-**默认传入类型和数据库中相同类名的表名  对应**
+**默认传入类型和数据库中相同类名的<u>表名</u>  对应**
 
 ```java
 public interface UsersMapper extends BaseMapper<Users> 

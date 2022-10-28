@@ -2416,6 +2416,45 @@ public class AccountServiceImpl implements AccountService {
 
 
 
+# Mybatis使用
+
+
+
+
+
+## 标签
+
+
+
+### choose
+
+
+
+
+
+choose标签：条件判断，**来拼接指定的条件，和switch-else类似**
+
+```xml
+<choose>
+　　<when test=条件1>
+　　　　执行的代码；
+　　</when>
+<when test=条件2>
+　　　　执行的代码；
+　　</when>
+　　......
+　　<otherwise>
+　　    执行的代码；
+　　</when>
+　　</otherwise>
+</choose>
+
+```
+
+**按顺序，只要有条件成立，其他的判断和代码都得不到执行**
+
+
+
 
 
 
