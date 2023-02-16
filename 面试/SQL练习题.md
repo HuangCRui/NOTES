@@ -1148,8 +1148,11 @@ select * from tree1 where path like CONCAT('%','6')
 拼接结果，防止sql注入：
 
 ```mysql
--- 后端这样使用：，传入num
+-- mybatis：传入num
 select * from tree1 where path like CONCAT('%',#{num})   
+                                           
+-- 当然也可以反着用
+SELECT ou_code from table where #{ouCode} like concat(ou_code, '%')
 ```
 
 
@@ -1225,7 +1228,7 @@ GROUP_CONCAT([DISTINCT] column1 [ORDER BY column2 ASC\DESC] [SEPARATOR seq]);
 ```
 
 - [ ORDER BY column2 ASC\DESC] :表示将会根据column2升序或者降序连接.其中column2不一定一定要求是column1,只要**保证column2在这个分组**中即可.如果没有写ORDER BY句段，那么**连接是没有顺序的**。
-- [ SEPARATOR seq] : 表示各个column1将会以什么分隔符进行分隔，例如SEPARATOR '’,则表示column1将会以进行分隔。如果没有指定seq的时候，也即没有写SEPARATOR seq这个句段，那么就会默认是以","分隔的。
+- [ SEPARATOR seq] : 表示各个column1将会以什么分隔符进行分隔，例如SEPARATOR '’,则表示column1将会以进行分隔。如果没有指定seq的时候，也即没有写SEPARATOR seq这个句段，那么就会**<u>默认是以","分隔的</u>**。
 
 > **排序规则的字段一定是需要在当前分组内，**
 
@@ -1386,20 +1389,22 @@ SELECT CONCAT_WS(',','First name',NULL,'Last Name');
 ```mysql
 select * from a left join 
 (
-	select * from b where b.date between x and y
+	select * from b   where b.date between x and y
 )
 on a.id = b.id
 ```
 
 
 
-> 不要**<u>乱用</u>**left / right join....
+> 不要**<u>乱用</u>**left / right join....   
 >
 > 不如直接多表查询
+>
+> （**这句话其实是没道理的，直接使用外连接会让表变得很大，left join可以连接到小表，减小消耗**）
 
 这样结果会显示a. *和b. *，**因为是按照两个表的id进行连接，并且以a为准**
 
-> **以a表为准：** 不管b的筛选条件如何，都以两表联结的条件on为准，其他字段如果没有，就**显示null**，只要a表数据有就行,
+> **以a表为准：** 不管b的筛选条件如何，都**以两表联结的条件on字段为准**，其他字段如果没有，就**显示null**，只要a表数据有**就会产生一行数据**。
 >
 > 
 
@@ -1414,17 +1419,21 @@ on a.id = b.id
 
 
 
+----
+
+https://blog.csdn.net/qq_44748801/article/details/123727426
 
 
 
+```mysql
+from video_order o left join user u on o.user_id = u.id  and u.id=6
+```
+
+不管on里条件如何如何，左边o表的数据行一定会展示，至于u表，如果没查出来就全显示null，**所以最好在连接后  <u>对整体的结果</u>使用where语句，才能过滤掉左表o的数据**
 
 
 
-
-
-
-
-
+所以同理，如果在left join（子查询，中使用where语句过滤右表的信息最终输出结果），最后还是会根据左表来给出结果，**不如在最外层使用where过滤总的数据行**
 
 
 
