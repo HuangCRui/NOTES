@@ -1082,7 +1082,7 @@ select dept_no, group_concat(emp_no SEPARATOR ',') from dept_emp group by dept_n
 
 
 
-# sql操作
+# **sql操作**
 
 
 
@@ -1443,7 +1443,18 @@ from video_order o left join user u on o.user_id = u.id  and u.id=6
 
 
 
+### 执行顺序
 
+
+
+```
+SELECT DISTINCT 
+FROM JOIN 
+WHERE 
+GROUP BY 
+HAVING 
+ORDER BY limit
+```
 
 
 
